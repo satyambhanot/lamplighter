@@ -218,3 +218,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Lamplighter-specific
+.venv/
+data/raw/*
+!data/raw/.gitkeep
+api/*.db
+api/*.db-wal
+api/*.db-shm

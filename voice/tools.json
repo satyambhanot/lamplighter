@@ -1,0 +1,4 @@
+{
+  "_note": "Placeholder. Filled in Phase 7 with the exact ElevenLabs webhook tool format (verify against current ElevenLabs docs) for report_light -> POST /report and check_status -> GET /status. Both calls must send the X-Lamplighter-Voice-Secret header.",
+  "tools": []
+}
