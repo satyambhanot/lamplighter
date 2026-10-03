@@ -348,3 +348,8 @@ Licence: Open Government Licence - City of Calgary. Cite it.
   wait for sign-off.
 - After coding, run it and show the real output.
 - Commit after each working step with a clear message.
+- Claude must never appear as a contributor, co-author, or author on
+  anything in this repo: no `Co-Authored-By` trailers, no commits
+  authored as Claude, no PRs/issues opened under a Claude identity.
+  Commits are authored by the human teammate who asked for them, full
+  stop.
