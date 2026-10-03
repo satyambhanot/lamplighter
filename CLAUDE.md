@@ -118,7 +118,7 @@ score is measured in weeks so all weights sit on a similar scale.
 | Repair time | 30 minutes |
 | Travel speed | 30 km/h |
 | Depot | Average location of all tickets: 51.04062, -114.05793 (Phase 1) |
-| Weekly crew minutes | 840 (14 crew-hours/week); set in Phase 1 so FIFO fixes ~85% of the 32.9/week average arrival rate, ignoring travel time — revisit once Phase 2 routing shows real throughput |
+| Weekly crew minutes | 840 (14 crew-hours/week); validated against Phase 2 routing, see note below |
 | Sensitivity runs | 70%, 85%, 100% of that budget |
 | Risk weight per dark night | 1, plus 1 if damage, 1 if near a school, 0.5 if near transit, 0.25 per extra call (max 1) |
 | Tuning window | March 23 to June 30 |
@@ -127,6 +127,19 @@ score is measured in weeks so all weights sit on a similar scale.
 
 Risk weights define the city's cost of a dark night. They are fixed and
 never tuned. Only the policy weights are tuned.
+
+**Weekly crew minutes, validated (Phase 2):** the original Phase 1
+framing ("85% of average weekly arrivals") assumed 32.9 raw tickets/week
+as the arrival rate and ignored travel time. Real routing shows that's
+wrong on both counts: duplicate merging (within DUPLICATE_RADIUS_M of a
+still-unfixed light) means many calls are repeats about an already-
+queued problem, so the real rate of *new* lights is closer to ~22/week
+— and that rate itself falls as the backlog shrinks. At 840 minutes,
+FIFO's real (travel-inclusive) throughput averages ~20 fixes/week:
+a mild, shrinking but non-trivial backlog (29 lights still dark at the
+end of the full replay) — exactly the realistic backlog this project
+calls for. Tested budgets up to 1350 minutes barely move throughput
+(the duplicate-merge dynamic caps it), so 840 stays.
 
 ### Data model
 

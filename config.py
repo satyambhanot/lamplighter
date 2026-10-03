@@ -52,12 +52,19 @@ TRAVEL_SPEED_KMH = 30
 DEPOT_LAT: float = 51.04062
 DEPOT_LON: float = -114.05793
 
-# Weekly crew time budget in minutes. Set in Phase 1 so FIFO fixes about
-# 85% of average weekly arrivals (a realistic, non-trivial backlog).
-# Average weekly arrivals over the 774-ticket seed data: 32.86/week.
-# 0.85 * 32.86 ≈ 28 fixes/week * REPAIR_MINUTES, ignoring travel time
-# (Phase 2's routing will show the real throughput once travel is added;
-# revisit this number then if FIFO's actual fix rate drifts far from 85%).
+# Weekly crew time budget in minutes, validated against Phase 2's real
+# routing (not just REPAIR_MINUTES). Raw ticket arrivals average
+# 32.9/week, but duplicate merging (within DUPLICATE_RADIUS_M of a still-
+# unfixed light) means many of those are repeat calls about an already-
+# queued problem — the real rate of *new* lights is closer to ~22/week,
+# and that rate itself falls as the backlog shrinks (a fixed light's
+# location can generate a fresh light again). At 840 minutes, FIFO
+# averages ~20 fixes/week against that real rate: a mild, shrinking but
+# non-trivial backlog (29 lights still dark at the end of the full
+# replay) — the realistic backlog the architecture calls for. Raising
+# the budget well past this (tested up to 1350 min) barely moves
+# throughput, so 840 is kept rather than over-provisioning for a ceiling
+# the duplicate-merge dynamic won't let FIFO reach anyway.
 WEEKLY_CREW_MINUTES: int = 840
 
 # Fraction of WEEKLY_CREW_MINUTES used for the sensitivity sweep and the
