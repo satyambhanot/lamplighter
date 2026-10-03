@@ -25,9 +25,12 @@ WORKDAYS_PER_WEEK = 5
 
 
 class Policy(Protocol):
-    """A policy takes the open queue and returns an ordered list of light ids."""
+    """A policy takes the open queue plus the current simulated date and
+    returns an ordered list of light ids (best first). ``as_of`` is
+    needed for age-based scoring; fifo_policy ignores it.
+    """
 
-    def __call__(self, queue: pd.DataFrame) -> list[str]: ...
+    def __call__(self, queue: pd.DataFrame, as_of: pd.Timestamp) -> list[str]: ...
 
 
 @dataclass
@@ -55,8 +58,10 @@ class RunResult:
     weekly_log: pd.DataFrame
 
 
-def fifo_policy(queue: pd.DataFrame) -> list[str]:
-    """Oldest-first baseline: rank by first_reported ascending."""
+def fifo_policy(queue: pd.DataFrame, as_of: pd.Timestamp | None = None) -> list[str]:
+    """Oldest-first baseline: rank by first_reported ascending.
+    as_of is unused — FIFO doesn't need the current date.
+    """
     return queue.sort_values("first_reported").index.tolist()
 
 
@@ -130,7 +135,7 @@ def _merge_or_create(open_lights: dict[str, dict], ticket: dict) -> None:
 
 def simulate(
     tickets: pd.DataFrame,
-    policy: Callable[[pd.DataFrame], list[str]],
+    policy: Callable[[pd.DataFrame, pd.Timestamp], list[str]],
     budget_min: int,
     window: tuple[str, str] | None = None,
 ) -> RunResult:
@@ -174,7 +179,7 @@ def simulate(
         queue_size_before = len(open_lights)
         if open_lights:
             queue_df = pd.DataFrame.from_dict(open_lights, orient="index")
-            order = policy(queue_df)
+            order = policy(queue_df, monday)
             selected = plan_week(queue_df, order, budget_min)
             minutes_used = route_minutes(queue_df, selected)
         else:

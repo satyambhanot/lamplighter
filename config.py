@@ -26,6 +26,12 @@ TRANSIT_STOPS_CSV = RAW_DATA_DIR / "transit_stops.csv"
 # filters this down to TICKETS_CSV.
 RAW_311_CSV = RAW_DATA_DIR / "311_Service_Requests_-_Current_Year.csv"
 
+# data.calgary.ca Socrata API (SODA) endpoints, verified directly against
+# the live API in Phase 3 — not guessed. scripts/fetch_open_data.py
+# downloads these into SCHOOLS_CSV / TRANSIT_STOPS_CSV.
+SCHOOLS_DATASET_URL = "https://data.calgary.ca/resource/fd9t-tdn2.json"  # "Schools", 506 rows
+TRANSIT_STOPS_DATASET_URL = "https://data.calgary.ca/resource/muzh-c9qc.json"  # "Calgary Transit Stops"
+
 WEIGHTS_JSON = RESULTS_DIR / "weights.json"
 TUNING_LOG_CSV = RESULTS_DIR / "tuning_log.csv"
 SUMMARY_CSV = RESULTS_DIR / "summary.csv"
