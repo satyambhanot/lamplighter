@@ -45,6 +45,8 @@ class RunResult:
         median_days_dark: Median days-to-fix across fixed lights.
         still_dark_at_end: Lights never fixed by the end of the run.
         dark_nights_by_community: Risk-weighted dark nights per comm_name.
+        fixed_by_community: Count of lights fixed per comm_name (within
+            ``window`` if given) — used by the crew-cut comparison.
         weekly_log: One row per simulated week (for debugging/plots).
     """
 
@@ -55,6 +57,7 @@ class RunResult:
     median_days_dark: float
     still_dark_at_end: int
     dark_nights_by_community: pd.Series
+    fixed_by_community: pd.Series
     weekly_log: pd.DataFrame
 
 
@@ -248,6 +251,10 @@ def simulate(
     crew_hours_in_window = weeks_in_window["minutes_used"].sum() / 60
     fixes_per_crew_hour = len(fixed_in_window) / crew_hours_in_window if crew_hours_in_window > 0 else float("nan")
 
+    fixed_by_community = (
+        fixed_in_window.groupby("comm_name").size().sort_values(ascending=False) if not fixed_in_window.empty else pd.Series(dtype=int)
+    )
+
     return RunResult(
         lights_fixed=len(fixed_in_window) if window else len(fixed_df),
         total_dark_nights=total_dark_nights,
@@ -256,6 +263,7 @@ def simulate(
         median_days_dark=median_days_dark,
         still_dark_at_end=len(open_df),
         dark_nights_by_community=dark_nights_by_community,
+        fixed_by_community=fixed_by_community,
         weekly_log=weekly_log,
     )
 
