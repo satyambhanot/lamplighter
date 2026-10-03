@@ -268,7 +268,7 @@ the real wall clock so `/events?since=` works.
 ```text
 engine/
   load_tickets() -> DataFrame
-  build_features(lights, layers) -> DataFrame
+  build_features(lights, layers, as_of) -> DataFrame
   score(features, weights) -> Series
   plan_week(queue, order, budget_min) -> list[light_id]
   simulate(tickets, policy, budget_min) -> RunResult
