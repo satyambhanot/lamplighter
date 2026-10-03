@@ -136,6 +136,20 @@ def _merge_or_create(open_lights: dict[str, dict], ticket: dict) -> None:
     }
 
 
+def build_open_queue(tickets: pd.DataFrame) -> pd.DataFrame:
+    """Merge every ticket into its light (within DUPLICATE_RADIUS_M of
+    an existing light, else a new one) as a single one-shot pass — the
+    queue as if nothing had ever been fixed. simulate()'s weekly loop
+    does this incrementally instead (fixing removes lights from the
+    pool between merges); this is for one-shot snapshots: examples,
+    demos, and anything that doesn't need the week-by-week fix history.
+    """
+    open_lights: dict[str, dict] = {}
+    for ticket in tickets.sort_values("requested_date").to_dict("records"):
+        _merge_or_create(open_lights, ticket)
+    return pd.DataFrame.from_dict(open_lights, orient="index") if open_lights else pd.DataFrame(columns=LIGHT_COLUMNS)
+
+
 def simulate(
     tickets: pd.DataFrame,
     policy: Callable[[pd.DataFrame, pd.Timestamp], list[str]],
