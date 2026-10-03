@@ -117,8 +117,8 @@ score is measured in weeks so all weights sit on a similar scale.
 | Cluster radius | 500 m |
 | Repair time | 30 minutes |
 | Travel speed | 30 km/h |
-| Depot | Average location of all tickets (stated as an assumption) |
-| Weekly crew minutes | Set in Phase 1 so FIFO fixes about 85% of average weekly arrivals |
+| Depot | Average location of all tickets: 51.04062, -114.05793 (Phase 1) |
+| Weekly crew minutes | 840 (14 crew-hours/week); set in Phase 1 so FIFO fixes ~85% of the 32.9/week average arrival rate, ignoring travel time — revisit once Phase 2 routing shows real throughput |
 | Sensitivity runs | 70%, 85%, 100% of that budget |
 | Risk weight per dark night | 1, plus 1 if damage, 1 if near a school, 0.5 if near transit, 0.25 per extra call (max 1) |
 | Tuning window | March 23 to June 30 |
@@ -312,16 +312,21 @@ this line lands well.)
 
 ## Data
 
-`data/street_lights_311.csv`: 800 Calgary 311 tickets, Mar 23 to Aug 27,
-2026. Columns: service_request_id, requested_date, updated_date,
-closed_date, status_description, service_name, comm_name, address,
-longitude, latitude.
+`data/street_lights_311.csv`: 774 Calgary 311 tickets, Mar 23 to Aug 27,
+2026, filtered from the full City of Calgary 311 export (`data/raw/`,
+gitignored, 1M+ rows of every service type) by
+`scripts/prepare_seed_data.py`. Columns: service_request_id,
+requested_date, updated_date, closed_date, status_description,
+service_name, comm_name, address, longitude, latitude.
 
-Known facts:
+Known facts (measured from the actual seed data — the open-data feed
+updates continuously, so exact counts will drift if re-pulled):
 - `address` is empty for every row. Use latitude and longitude.
-- `service_name` is "Roads - Streetlight Maintenance" (613) or
-  "Roads - Streetlight Damage" (187).
-- Status: 787 Closed, 9 Duplicate (Closed), 3 Open, 1 Duplicate (Open).
+- No missing coordinates.
+- `service_name` is "Roads - Streetlight Maintenance" (589) or
+  "Roads - Streetlight Damage" (185).
+- Status: 762 Closed, 9 Duplicate (Closed), 2 Open, 1 Duplicate (Open).
+- Tickets per week over the window: mean 32.9, min 0, max 74 (22 weeks).
 - Most tickets close the same day they open, so `closed_date` likely
   means "handed off", not "fixed". Never use `closed_date` as a repair
   date.

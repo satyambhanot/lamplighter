@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import pandas as pd
 
-from config import TUNING_LOG_CSV
-
 
 def random_search(
     tickets: pd.DataFrame,

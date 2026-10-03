@@ -21,6 +21,11 @@ TICKETS_CSV = DATA_DIR / "street_lights_311.csv"
 SCHOOLS_CSV = RAW_DATA_DIR / "schools.csv"
 TRANSIT_STOPS_CSV = RAW_DATA_DIR / "transit_stops.csv"
 
+# Full City of Calgary 311 export, manually downloaded into data/raw/
+# (gitignored — 1M+ rows, every service type). scripts/prepare_seed_data.py
+# filters this down to TICKETS_CSV.
+RAW_311_CSV = RAW_DATA_DIR / "311_Service_Requests_-_Current_Year.csv"
+
 WEIGHTS_JSON = RESULTS_DIR / "weights.json"
 TUNING_LOG_CSV = RESULTS_DIR / "tuning_log.csv"
 SUMMARY_CSV = RESULTS_DIR / "summary.csv"
@@ -42,14 +47,18 @@ CLUSTER_RADIUS_M = 500
 REPAIR_MINUTES = 30
 TRAVEL_SPEED_KMH = 30
 
-# DEPOT is the average location of all tickets. It is computed once in
-# Phase 1 and then frozen here as a stated assumption.
-DEPOT_LAT: float | None = None
-DEPOT_LON: float | None = None
+# DEPOT is the average location of all tickets. Computed once in Phase 1
+# from the 774-ticket seed data and frozen here as a stated assumption.
+DEPOT_LAT: float = 51.04062
+DEPOT_LON: float = -114.05793
 
 # Weekly crew time budget in minutes. Set in Phase 1 so FIFO fixes about
 # 85% of average weekly arrivals (a realistic, non-trivial backlog).
-WEEKLY_CREW_MINUTES: int | None = None
+# Average weekly arrivals over the 774-ticket seed data: 32.86/week.
+# 0.85 * 32.86 ≈ 28 fixes/week * REPAIR_MINUTES, ignoring travel time
+# (Phase 2's routing will show the real throughput once travel is added;
+# revisit this number then if FIFO's actual fix rate drifts far from 85%).
+WEEKLY_CREW_MINUTES: int = 840
 
 # Fraction of WEEKLY_CREW_MINUTES used for the sensitivity sweep and the
 # crew-cut scenario (crew cut uses the 0.70 entry... see README for which
@@ -92,6 +101,16 @@ TUNE_END = "2026-06-30"
 TEST_START = "2026-07-01"
 TEST_END = "2026-08-27"
 DEMO_DATE = "2026-08-24"  # Monday
+
+# --- 311 source data ----------------------------------------------------------
+
+# service_name values that count as a street light ticket. "Damage" tickets
+# get RISK_WEIGHT_DAMAGE; everything else is routine "Maintenance".
+STREETLIGHT_SERVICE_NAMES = (
+    "Roads - Streetlight Maintenance",
+    "Roads - Streetlight Damage",
+)
+DAMAGE_SERVICE_NAME = "Roads - Streetlight Damage"
 
 # --- External services --------------------------------------------------------
 

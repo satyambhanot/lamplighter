@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 
-from api import db, service
+from api import db
 from api.schemas import (
     EventItem,
     FixedResponse,
