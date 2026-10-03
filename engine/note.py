@@ -28,8 +28,8 @@ NOTE_SYSTEM_PROMPT = (
 def _facts(plan: pd.DataFrame, skipped: pd.DataFrame, crew_cut_pct: float | None) -> dict:
     """Computed facts for the note — the only things the LLM may draw on."""
     facts: dict = {
-        "n_planned": int(len(plan)),
-        "n_skipped": int(len(skipped)),
+        "n_planned": len(plan),
+        "n_skipped": len(skipped),
         "damage_count": int(plan["is_damage"].sum()) if "is_damage" in plan and not plan.empty else 0,
         "school_count": int(plan["near_school"].sum()) if "near_school" in plan and not plan.empty else 0,
         "transit_count": int(plan["near_transit"].sum()) if "near_transit" in plan and not plan.empty else 0,

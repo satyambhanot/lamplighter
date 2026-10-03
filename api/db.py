@@ -74,41 +74,99 @@ def init_db(db_path: str = str(DB_PATH)) -> None:
         conn.close()
 
 
+LIGHT_COLUMNS = (
+    "id",
+    "lat",
+    "lon",
+    "comm_name",
+    "is_damage",
+    "first_reported",
+    "call_count",
+    "status",
+    "fixed_at",
+    "near_school",
+    "near_transit",
+    "score",
+    "rank",
+    "expected_fix_date",
+    "reasons",
+)
+
+
 def get_light(conn: sqlite3.Connection, light_id: str) -> sqlite3.Row | None:
     """Fetch one light by id, or None if it doesn't exist."""
-    raise NotImplementedError("Phase 6")
+    return conn.execute("SELECT * FROM lights WHERE id = ?", (light_id,)).fetchone()
 
 
 def upsert_light(conn: sqlite3.Connection, light: dict) -> None:
-    """Insert a new light or update an existing one in place."""
-    raise NotImplementedError("Phase 6")
+    """Insert a new light or update an existing one in place.
+    ``light`` must have a key for every column in LIGHT_COLUMNS
+    (missing keys are stored as NULL).
+    """
+    columns = LIGHT_COLUMNS
+    placeholders = ", ".join(f":{col}" for col in columns)
+    conn.execute(
+        f"INSERT OR REPLACE INTO lights ({', '.join(columns)}) VALUES ({placeholders})",
+        {col: light.get(col) for col in columns},
+    )
 
 
 def get_open_queue(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Return all open lights ordered by rank."""
-    raise NotImplementedError("Phase 6")
+    return conn.execute("SELECT * FROM lights WHERE status = 'open' ORDER BY rank").fetchall()
 
 
 def insert_call(conn: sqlite3.Connection, call: dict) -> int:
     """Record a call against a light; returns the new call row id."""
-    raise NotImplementedError("Phase 6")
+    cursor = conn.execute(
+        "INSERT INTO calls (light_id, phone_hash, channel, location_text, description, created_at) "
+        "VALUES (:light_id, :phone_hash, :channel, :location_text, :description, :created_at)",
+        call,
+    )
+    return cursor.lastrowid
 
 
 def insert_event(conn: sqlite3.Connection, event: dict) -> None:
     """Append one activity-log event."""
-    raise NotImplementedError("Phase 6")
+    conn.execute(
+        "INSERT INTO events (at, type, light_id, message) VALUES (:at, :type, :light_id, :message)",
+        event,
+    )
 
 
 def get_events_since(conn: sqlite3.Connection, since: str) -> list[sqlite3.Row]:
     """Return events with ``at`` after the given ISO timestamp."""
-    raise NotImplementedError("Phase 6")
+    return conn.execute("SELECT * FROM events WHERE at > ? ORDER BY at", (since,)).fetchall()
 
 
 def get_geocode_cache(conn: sqlite3.Connection, query: str) -> sqlite3.Row | None:
     """Look up a previously geocoded query string."""
-    raise NotImplementedError("Phase 6")
+    return conn.execute("SELECT * FROM geocode_cache WHERE query = ?", (query,)).fetchone()
 
 
 def set_geocode_cache(conn: sqlite3.Connection, query: str, lat: float, lon: float, source: str) -> None:
     """Cache a geocoding result."""
-    raise NotImplementedError("Phase 6")
+    conn.execute(
+        "INSERT OR REPLACE INTO geocode_cache (query, lat, lon, source) VALUES (?, ?, ?, ?)",
+        (query, lat, lon, source),
+    )
+
+
+def get_latest_call_light_id(conn: sqlite3.Connection, phone_hash: str) -> str | None:
+    """Most recent light reported by this caller (by phone hash), or
+    None if this caller has never reported one. Used by GET /status.
+    """
+    row = conn.execute(
+        "SELECT light_id FROM calls WHERE phone_hash = ? ORDER BY created_at DESC LIMIT 1",
+        (phone_hash,),
+    ).fetchone()
+    return row["light_id"] if row else None
+
+
+def clear_demo_state(conn: sqlite3.Connection) -> None:
+    """Wipe lights/calls/events for a fresh demo reset. geocode_cache
+    survives a reset — it's just a cache, not demo state.
+    """
+    conn.execute("DELETE FROM calls")
+    conn.execute("DELETE FROM events")
+    conn.execute("DELETE FROM lights")

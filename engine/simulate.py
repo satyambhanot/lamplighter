@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 import pandas as pd
 
 from config import (
+    DEMO_DATE,
     DUPLICATE_RADIUS_M,
     RISK_WEIGHT_BASE,
     RISK_WEIGHT_DAMAGE,
@@ -48,6 +49,10 @@ class RunResult:
         fixed_by_community: Count of lights fixed per comm_name (within
             ``window`` if given) — used by the crew-cut comparison.
         weekly_log: One row per simulated week (for debugging/plots).
+        snapshot_queue: The open queue as merged as of ``snapshot_at``
+            (before that week's plan runs), if requested — None
+            otherwise. Used by api/seed.py to build a realistic demo
+            state without re-deriving replay logic.
     """
 
     lights_fixed: int
@@ -59,6 +64,7 @@ class RunResult:
     dark_nights_by_community: pd.Series
     fixed_by_community: pd.Series
     weekly_log: pd.DataFrame
+    snapshot_queue: pd.DataFrame | None = field(default=None)
 
 
 def fifo_policy(queue: pd.DataFrame, as_of: pd.Timestamp | None = None) -> list[str]:
@@ -74,9 +80,12 @@ def _week_start(ts: pd.Timestamp) -> pd.Timestamp:
     return ts - pd.Timedelta(days=ts.weekday())
 
 
-def _risk_weight(row: pd.Series) -> float:
-    """config.RISK_WEIGHT_* combined for one light. near_school/near_transit
-    default to False until engine/features.py (Phase 3) fills them in.
+def risk_weight(row: pd.Series) -> float:
+    """config.RISK_WEIGHT_* combined for one light (see CLAUDE.md's
+    "Risk weight per dark night" row). ``row`` needs is_damage and
+    call_count; near_school/near_transit default to False if absent.
+    Public — the live API reuses this for its own risk-weighted metric
+    so it can't drift from the offline replay's definition.
     """
     weight = RISK_WEIGHT_BASE
     if row["is_damage"]:
@@ -155,6 +164,7 @@ def simulate(
     policy: Callable[[pd.DataFrame, pd.Timestamp], list[str]],
     budget_min: int,
     window: tuple[str, str] | None = None,
+    snapshot_at: str | None = None,
 ) -> RunResult:
     """Replay the full ticket history week by week under one policy.
 
@@ -172,6 +182,9 @@ def simulate(
         window: Optional (start_date, end_date) to restrict metrics
             reporting to (e.g. the Jul-Aug test window), without
             changing the replay itself.
+        snapshot_at: Optional ISO date (a Monday); if given, capture the
+            merged-but-not-yet-planned open queue for that week into
+            RunResult.snapshot_queue.
 
     Returns:
         A RunResult with the full metrics suite.
@@ -181,10 +194,12 @@ def simulate(
 
     first_monday = _week_start(tickets["requested_date"].min())
     last_monday = _week_start(tickets["requested_date"].max()) + pd.Timedelta(weeks=1)
+    snapshot_monday = pd.Timestamp(snapshot_at) if snapshot_at else None
 
     open_lights: dict[str, dict] = {}
     fixed_lights: list[dict] = []
     weekly_log_rows: list[dict] = []
+    snapshot_queue: pd.DataFrame | None = None
 
     ptr = 0
     monday = first_monday
@@ -192,6 +207,9 @@ def simulate(
         while ptr < len(ticket_records) and ticket_records[ptr]["requested_date"] < monday:
             _merge_or_create(open_lights, ticket_records[ptr])
             ptr += 1
+
+        if snapshot_monday is not None and monday == snapshot_monday:
+            snapshot_queue = pd.DataFrame.from_dict(open_lights, orient="index") if open_lights else pd.DataFrame(columns=LIGHT_COLUMNS)
 
         queue_size_before = len(open_lights)
         if open_lights:
@@ -234,14 +252,14 @@ def simulate(
 
     for _, row in fixed_df.iterrows():
         days = _days_in_window(row["first_reported"], row["fixed_at"], win)
-        weight = _risk_weight(row)
+        weight = risk_weight(row)
         total_dark_nights += days
         risk_weighted_dark_nights += days * weight
         community_rows.append({"comm_name": row["comm_name"], "weighted_days": days * weight})
 
     for _, row in open_df.iterrows():
         days = _days_in_window(row["first_reported"], run_end_date, win)
-        weight = _risk_weight(row)
+        weight = risk_weight(row)
         total_dark_nights += days
         risk_weighted_dark_nights += days * weight
         community_rows.append({"comm_name": row["comm_name"], "weighted_days": days * weight})
@@ -279,6 +297,7 @@ def simulate(
         dark_nights_by_community=dark_nights_by_community,
         fixed_by_community=fixed_by_community,
         weekly_log=weekly_log,
+        snapshot_queue=snapshot_queue,
     )
 
 
@@ -286,12 +305,40 @@ def project_fix_dates(queue: pd.DataFrame, weights: dict[str, float], budget_min
     """Estimate each queued light's fix date from its rank and weekly
     crew capacity. Used by /report and /status.
 
+    queue must already carry a ``score`` column (engine.score.score()) —
+    ``weights`` isn't re-applied here, it's just documenting which
+    weights produced that ranking. Projects forward from the Monday
+    after config.DEMO_DATE, since the demo clock is frozen there and a
+    light reported during demo-date week waits for the next Monday
+    like any other.
+
     Args:
         queue: Open lights, already featured and scored.
-        weights: Policy weights to rank by.
+        weights: Policy weights that produced ``queue``'s score column
+            (unused directly; ranking already reflects them).
         budget_min: Weekly crew minutes.
 
     Returns:
         Mapping of light id to an ISO date string.
     """
-    raise NotImplementedError("Phase 6")
+    if queue.empty:
+        return {}
+
+    remaining = queue.sort_values("score", ascending=False).index.tolist() if "score" in queue else queue.index.tolist()
+    dates: dict[str, str] = {}
+    monday = pd.Timestamp(DEMO_DATE) + pd.Timedelta(weeks=1)
+
+    max_weeks = 52
+    for _ in range(max_weeks):
+        if not remaining:
+            break
+        selected = plan_week(queue, remaining, budget_min)
+        if not selected:
+            break
+        for day_offset, light_id in _assign_workdays(selected):
+            dates[light_id] = (monday + pd.Timedelta(days=day_offset)).date().isoformat()
+        selected_set = set(selected)
+        remaining = [light_id for light_id in remaining if light_id not in selected_set]
+        monday += pd.Timedelta(weeks=1)
+
+    return dates

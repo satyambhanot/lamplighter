@@ -132,8 +132,16 @@ NOMINATIM_RATE_LIMIT_SECONDS = 1.0
 ANTHROPIC_MODEL = "claude-sonnet-5"
 
 # Demo addresses tried before Nominatim, so the demo never depends on an
-# outside service. Filled in as the team picks real demo call locations.
-DEMO_ADDRESSES: dict[str, tuple[float, float]] = {}
+# outside service. Real, verified Calgary locations (from the schools
+# layer), keyed by lowercase free text a caller might say. Extend as the
+# team picks real demo call locations.
+DEMO_ADDRESSES: dict[str, tuple[float, float]] = {
+    "king george school": (51.0709038, -114.0840698),
+    "fish creek school": (50.9015119, -114.0328256),
+    "arbour lake middle school": (51.1346577, -114.2091915),
+    "st. cecilia elementary school": (50.9653028, -114.0504253),
+    "city hall": (51.0460, -114.0574),  # Wikipedia: 51°02'46"N 114°03'27"W
+}
 
 # --- Voice / API security ------------------------------------------------------
 
