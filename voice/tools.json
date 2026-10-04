@@ -1,4 +1,61 @@
 {
-  "_note": "Placeholder. Filled in Phase 7 with the exact ElevenLabs webhook tool format (verify against current ElevenLabs docs) for report_light -> POST /report and check_status -> GET /status. Both calls must send the X-Lamplighter-Voice-Secret header.",
-  "tools": []
+  "_note": "ElevenLabs webhook tool definitions (POST /v1/convai/tools, tool_config). voice/setup_agent.py fills {PUBLIC_URL} from NGROK_DOMAIN and {VOICE_SECRET_ID} with the ElevenLabs workspace secret that holds VOICE_SHARED_SECRET. The phone is a fixed demo number, so the agent never asks the caller for one.",
+  "tools": [
+    {
+      "type": "webhook",
+      "name": "report_light",
+      "description": "File a street light outage report, or add this call to an existing report nearby. Use it only after the caller has confirmed the location you read back and has answered whether the pole is down or wires are exposed.",
+      "response_timeout_secs": 20,
+      "api_schema": {
+        "url": "{PUBLIC_URL}/report",
+        "method": "POST",
+        "request_headers": {
+          "X-Lamplighter-Voice-Secret": {"secret_id": "{VOICE_SECRET_ID}"},
+          "ngrok-skip-browser-warning": "true"
+        },
+        "request_body_schema": {
+          "type": "object",
+          "description": "The outage report.",
+          "required": ["phone", "location_text", "description"],
+          "properties": {
+            "phone": {
+              "type": "string",
+              "constant_value": "+14035550100"
+            },
+            "location_text": {
+              "type": "string",
+              "description": "The location exactly as the caller confirmed it: a street address, an intersection such as 'Centre Street and 16 Avenue NE', or a named place such as 'City Hall' or 'King George School'."
+            },
+            "description": {
+              "type": "string",
+              "description": "One short sentence describing the problem in the caller's words. If the caller said the pole is down, wires are exposed, something is sparking or on fire, include those exact words."
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "webhook",
+      "name": "check_status",
+      "description": "Look up the most recent street light report from this line: its place in the repair queue, its expected fix date and its status. Use it when the caller asks about a light they already reported.",
+      "response_timeout_secs": 20,
+      "api_schema": {
+        "url": "{PUBLIC_URL}/status",
+        "method": "GET",
+        "request_headers": {
+          "X-Lamplighter-Voice-Secret": {"secret_id": "{VOICE_SECRET_ID}"},
+          "ngrok-skip-browser-warning": "true"
+        },
+        "query_params_schema": {
+          "required": ["phone"],
+          "properties": {
+            "phone": {
+              "type": "string",
+              "constant_value": "+14035550100"
+            }
+          }
+        }
+      }
+    }
+  ]
 }

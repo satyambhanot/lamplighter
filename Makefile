@@ -1,4 +1,4 @@
-.PHONY: setup configure results preview api dash tunnel test reset lint
+.PHONY: setup configure results preview api dash tunnel voice voice-test test reset lint
 
 # The project targets Python 3.11. With uv installed, setup fetches 3.11
 # itself; otherwise it needs a python3.11 on PATH (override with PYTHON=...).
@@ -30,8 +30,20 @@ api:
 dash:
 	. .venv/bin/activate && streamlit run dashboard/app.py
 
+# Uses the fixed ngrok domain from NGROK_DOMAIN in .env, so the ElevenLabs
+# tools never need re-pointing. Without it, ngrok picks a random URL.
 tunnel:
-	ngrok http 8000
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	if [ -n "$$NGROK_DOMAIN" ]; then ngrok http 8000 --url "https://$$NGROK_DOMAIN"; else ngrok http 8000; fi
+
+# Creates or updates the ElevenLabs agent and tools (needs api + tunnel running).
+voice:
+	. .venv/bin/activate && python -m voice.setup_agent
+
+# Text-only test call through ElevenLabs: make voice-test SCENARIO=report|status|hazard
+SCENARIO ?= report
+voice-test:
+	. .venv/bin/activate && python -m voice.test_call --scenario $(SCENARIO)
 
 test:
 	. .venv/bin/activate && pytest -q
