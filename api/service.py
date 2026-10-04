@@ -328,14 +328,41 @@ def hash_phone(phone: str) -> str:
     return hmac.new(salt.encode(), normalized.encode(), hashlib.sha256).hexdigest()
 
 
+_HAZARD = re.compile(
+    r"\b(downed pole|fallen pole|down pole|pole (?:is |was |has been )?(?:knocked )?down|knocked down"
+    r"|exposed wires?|wires? (?:are |is )?exposed|sparking|sparks|on fire|burning)\b",
+    re.IGNORECASE,
+)
+# A denial ("no exposed wires or sparking", "pole isn't knocked down") only
+# counts in the same clause, and only if every word between the denial and
+# the hazard phrase is part of a hazard list. "The light is not working the
+# pole is down" stays a hazard because "working" breaks the link.
+_NEGATION = re.compile(
+    r"\b(?:no|not|without|isn't|aren't|wasn't|weren't|never|nothing|none)\b", re.IGNORECASE
+)
+_CLAUSE_BREAK = re.compile(r"[.,;:!?]|\bbut\b|\band\b", re.IGNORECASE)
+_HAZARD_LIST_WORDS = {
+    "any", "the", "is", "are", "was", "were", "there", "or", "visible", "signs", "of",
+    "exposed", "wire", "wires", "sparking", "sparks", "pole", "knocked", "burning", "on", "fire",
+}  # fmt: skip
+
+
+def _is_denied(text_before: str) -> bool:
+    clause = _CLAUSE_BREAK.split(text_before)[-1]
+    denials = list(_NEGATION.finditer(clause))
+    if not denials:
+        return False
+    between = clause[denials[-1].end() :].lower().split()
+    return all(word in _HAZARD_LIST_WORDS for word in between)
+
+
 def check_hazard(description: str) -> bool:
-    return bool(
-        re.search(
-            r"\b(downed pole|fallen pole|down pole|exposed wires?|sparking|on fire|burning)\b",
-            description,
-            re.IGNORECASE,
-        )
-    )
+    """True if the description reports a hazard that is not denied.
+
+    "Exposed wires on the sidewalk" is a hazard; "no exposed wires" is not.
+    When in doubt it flags, because a missed hazard is worse than a false one.
+    """
+    return any(not _is_denied(description[: match.start()]) for match in _HAZARD.finditer(description))
 
 
 def report_light(
@@ -350,7 +377,7 @@ def report_light(
         return ReportResponse(
             hazard=hazard,
             needs_clarification=True,
-            message="Please provide the nearest intersection or a precise location.",
+            message="Please provide a street address or a well-known place nearby.",
         )
     with db.transaction(conn, write=True):
         nearby = None if hazard else live.nearest_light(_frame(conn), *coords, DUPLICATE_RADIUS_M)
