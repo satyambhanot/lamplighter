@@ -35,7 +35,7 @@ def test_live_failure_has_no_fake_live_queue(monkeypatch) -> None:
 def test_live_disconnect_preserves_only_the_same_scenario(monkeypatch) -> None:
     state = {"offline": False}
 
-    def live(base_url, policy, budget):
+    def live(base_url, policy, budget, token):
         if state["offline"]:
             raise data.DataUnavailable("Connection lost")
         return data.load_preview(policy, budget)
@@ -86,6 +86,7 @@ def test_new_revision_invalidates_review_and_prevents_confirm(monkeypatch):
     def live(*args):
         view = data.load_preview("tuned", 100)
         view.revision = state["revision"]
+        view.plan.candidate_id = "test-candidate-123456"
         return view
 
     monkeypatch.setenv("DISPATCH_SHARED_SECRET", "test-token")

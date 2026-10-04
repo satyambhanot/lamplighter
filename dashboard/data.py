@@ -48,6 +48,7 @@ class Plan(BaseModel):
 
     budget_pct: float = Field(gt=0)
     policy: Literal["fifo", "v1", "tuned"]
+    candidate_id: str | None = None
     lights_planned: int = Field(ge=0)
     minutes_used: float = Field(ge=0)
     skipped_count: int = Field(ge=0)
@@ -77,6 +78,8 @@ class ConfirmedVisit(BaseModel):
     ticket_id: str
     position: int
     status: str
+    comm_name: str = "Unassigned"
+    fixed_at: datetime | None = None
 
 
 class ConfirmedPlan(BaseModel):
@@ -88,6 +91,16 @@ class ConfirmedPlan(BaseModel):
     remaining_ids: list[str]
     completed_count: int
     visits: list[ConfirmedVisit] = Field(default_factory=list)
+
+
+class HazardItem(BaseModel):
+    ticket_id: str
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    first_reported: datetime
+    location_text: str
+    description: str
+    call_count: int = Field(ge=1)
 
 
 class HistoryItem(BaseModel):
@@ -112,6 +125,7 @@ class DispatchView(BaseModel):
     revision: int | None = None
     as_of: str = DEMO_DATE
     confirmed_plan: ConfirmedPlan | None = None
+    hazards: list[HazardItem] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def check_queue(self) -> DispatchView:
@@ -153,6 +167,8 @@ def _get(base_url: str, endpoint: str, *, headers: dict | None = None, **params:
         response = requests.get(
             f"{base_url.rstrip('/')}/{endpoint}", params=params, headers=headers, timeout=(0.8, 3.0)
         )
+        if getattr(response, "status_code", None) == 401:
+            raise DataUnavailable("Dispatcher access is unavailable. Run make configure and restart the app.")
         response.raise_for_status()
         return response.json()
     except (requests.RequestException, ValueError) as exc:
@@ -161,9 +177,15 @@ def _get(base_url: str, endpoint: str, *, headers: dict | None = None, **params:
         ) from exc
 
 
-def fetch_live(base_url: str, policy: str, budget: int) -> DispatchView:
+def fetch_live(base_url: str, policy: str, budget: int, token: str = "") -> DispatchView:
     """Read a single revisioned snapshot so queue, plan, and baseline agree."""
-    payload = _get(base_url, "dispatch", policy=policy, budget_pct=budget / 100)
+    payload = _get(
+        base_url,
+        "dispatch",
+        headers={"X-Lamplighter-Dispatcher-Secret": token},
+        policy=policy,
+        budget_pct=budget / 100,
+    )
     try:
         if not isinstance(payload, dict):
             raise TypeError("dispatch must be an object")

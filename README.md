@@ -21,18 +21,21 @@ make reset     # restore demo state
 
 ## Status
 
-The dashboard now supports a linked map, selectable queue rows, report history,
+The dispatch workspace puts urgent hazards, route status, a searchable worklist,
+ticket details, and the linked map in task order. It supports report history,
 numbered visits, school/transit layers, and a separate evaluation workspace.
-Planned visits and the waiting backlog have separate searchable tables and CSV
+Planned visits and the waiting backlog have separate worklist tabs and CSV
 exports. Capacity impact compares actual membership against a 100% plan for
 the same queue and policy, including visits replaced rather than just net totals.
 
 Start `make api` and `make dash` in separate terminals after `make configure`.
-In **Live dispatch**, review the proposal, acknowledge its order and capacity,
-and confirm it. Select a confirmed light, acknowledge crew completion, and
-mark it repaired. Confirmed stop numbers stay fixed; the proposal recalculates
-remaining work. New reports invalidate confirmation until a new review.
-Dispatcher writes and report history require the local dispatcher key; voice
+In **Live dispatch**, review the proposed stops and capacity change, acknowledge
+the review, and confirm the exact candidate shown. Select a confirmed light,
+acknowledge crew completion, and mark it repaired. Confirmed stop numbers stay
+fixed; the proposal recalculates remaining work. New reports invalidate
+confirmation until a new review. Urgent hazards appear above the routine route;
+record their handoff destination and reference after escalation. Dispatcher
+reads, writes, and report history require the local dispatcher key; voice
 report/status requests require the voice key. Keys stay in the ignored `.env`.
 
 The default **Historical preview** uses real Calgary reports and simulated

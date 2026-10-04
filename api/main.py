@@ -20,6 +20,8 @@ from api.schemas import (
     DispatchResponse,
     EventItem,
     FixedResponse,
+    HazardHandoffRequest,
+    HazardHandoffResponse,
     HealthResponse,
     HistoryResponse,
     PlanResponse,
@@ -89,7 +91,7 @@ def health(conn: sqlite3.Connection = Depends(get_db)) -> HealthResponse:
     return HealthResponse(status="ok")
 
 
-@app.get("/dispatch", response_model=DispatchResponse)
+@app.get("/dispatch", response_model=DispatchResponse, dependencies=[Depends(require_dispatch_secret)])
 def dispatch(
     policy: Literal["fifo", "v1", "tuned"] = "tuned",
     budget_pct: float = Query(default=1.0, ge=0.5, le=1.2, allow_inf_nan=False),
@@ -98,12 +100,12 @@ def dispatch(
     return service.dispatch_snapshot(conn, policy, budget_pct)
 
 
-@app.get("/queue", response_model=list[QueueItem])
+@app.get("/queue", response_model=list[QueueItem], dependencies=[Depends(require_dispatch_secret)])
 def queue(conn: sqlite3.Connection = Depends(get_db)) -> list[QueueItem]:
     return service.dispatch_snapshot(conn, "tuned", 1.0).queue
 
 
-@app.get("/plan", response_model=PlanResponse)
+@app.get("/plan", response_model=PlanResponse, dependencies=[Depends(require_dispatch_secret)])
 def plan(
     policy: Literal["fifo", "v1", "tuned"] = "tuned",
     budget_pct: float = Query(default=1.0, ge=0.5, le=1.2, allow_inf_nan=False),
@@ -112,7 +114,7 @@ def plan(
     return service.build_plan(conn, budget_pct, policy)
 
 
-@app.get("/events", response_model=list[EventItem])
+@app.get("/events", response_model=list[EventItem], dependencies=[Depends(require_dispatch_secret)])
 def events(since: str = "1970", conn: sqlite3.Connection = Depends(get_db)) -> list[EventItem]:
     return [EventItem(**dict(row)) for row in db.get_events_since(conn, since)]
 
@@ -129,6 +131,20 @@ def history(ticket_id: str, conn: sqlite3.Connection = Depends(get_db)) -> Histo
 @app.post("/plans/confirm", response_model=ConfirmedPlan, dependencies=[Depends(require_dispatch_secret)])
 def confirm(req: ConfirmRequest, conn: sqlite3.Connection = Depends(get_db)) -> ConfirmedPlan:
     return service.confirm_plan(conn, req)
+
+
+@app.post(
+    "/hazards/{ticket_id}/handoff",
+    response_model=HazardHandoffResponse,
+    dependencies=[Depends(require_dispatch_secret)],
+)
+def handoff_hazard(
+    ticket_id: str, req: HazardHandoffRequest, conn: sqlite3.Connection = Depends(get_db)
+) -> HazardHandoffResponse:
+    try:
+        return service.handoff_hazard(conn, ticket_id, req)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/fixed/{ticket_id}", response_model=FixedResponse, dependencies=[Depends(require_dispatch_secret)])
