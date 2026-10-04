@@ -26,10 +26,13 @@ Before anything else:
    need a change in someone else's file, stop and tell me what to ask them for.
 4. Small PRs to main at least every 3 hours. main must always run.
 
-Current state: engine/ is done (scoring, simulation, tuning, crew cut, dispatcher
-note). results/ has real test-window numbers: FIFO 3250.5 -> v1 2870.5 ->
-tuned 2528.2 risk-weighted dark nights (-22.2%). Everything in api/, dashboard/,
-voice/, scripts/fake_call.py and docs/ is still a stub.
+Current state (Sat Oct 3, evening): engine/, api/ and dashboard/ are built
+and merged to main (77 tests pass). results/ has real test-window numbers:
+FIFO 4018.5 -> v1 3357.2 -> tuned 3006.0 risk-weighted dark nights (-25.2%).
+scripts/fake_call.py works against the live API. Still open: voice/ (the
+ElevenLabs agent: prompt, tools.json, SETUP.md, transcript) and the pitch
+material in docs/. Read the code before redoing anything in the role tasks
+below; many Engine and Backend tasks are already done.
 
 AGREED CONTRACTS (also in CLAUDE.md; code against these and do not change
 them without the team):

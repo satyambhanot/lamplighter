@@ -45,7 +45,7 @@ cloud hosting would add failure points without adding judging points.
 | Engine | pandas, numpy, scikit-learn `BallTree` (haversine) | Fast radius searches for duplicates, schools, transit |
 | API | FastAPI with Pydantic schemas | Typed contracts, auto docs at `/docs` |
 | Database | SQLite via stdlib `sqlite3`, WAL mode, no ORM | Zero setup; the API is the only writer |
-| Dashboard | Streamlit, pydeck map, `st.fragment(run_every=3)` for live refresh | Fastest path to a live map with no extra packages |
+| Dashboard | Streamlit, pydeck map, `st.fragment(run_every=5)` for live refresh | Fastest path to a live map with no extra packages |
 | Charts | matplotlib PNGs in `results/` | Reproducible and easy to put in slides |
 | Tuning | Random search, 200 trials, seed 42 | Simple, explainable, deterministic. Optuna is a stretch goal |
 | Voice | ElevenLabs agent with two webhook tools | ElevenLabs owns speech; we own logic |
@@ -83,7 +83,7 @@ lamplighter/
 ├── dashboard/app.py
 ├── voice/             prompt, tools, setup, transcript
 ├── scripts/           fetch_open_data.py, fake_call.py
-├── data/              seed CSV; raw/ is gitignored
+├── data/              seed CSV, schools.csv, transit_stops.csv; raw/ is gitignored
 ├── results/
 ├── tests/
 └── docs/              DESIGN.md, DEMO_SCRIPT.md
@@ -155,6 +155,9 @@ calls(id PK, light_id, phone_hash, channel, location_text,
       description, created_at)
 events(id PK, at, type, light_id, message)
 geocode_cache(query PK, lat, lon, source)
+dispatch_state(id PK = 1, revision, seeded)
+plans(id PK, policy, budget_pct, created_at, status, snapshot)
+plan_visits(plan_id, light_id, position, status)   PK(plan_id, light_id)
 ```
 
 The database stores facts and decisions; the engine owns the features.
@@ -166,6 +169,10 @@ recomputes them on every re-rank. A new feature built from existing
 facts plus a layer needs no schema change; a new raw input does.
 
 `status` is open, fixed, or hazard. `channel` is voice, fake, or seed.
+`dispatch_state.revision` goes up on every write, so stale dashboard
+writes are rejected. A plan's `status` is confirmed, needs_review (a new
+report arrived after confirmation), superseded, or completed;
+`plan_visits` keeps each confirmed stop number and whether it was fixed.
 Phone numbers are stored only as salted hashes, with the salt in `.env`.
 
 ### API contract
@@ -337,12 +344,14 @@ every later hour just makes it better.
 
 ```text
 make setup     create venv, install requirements
+make configure generate local access keys in the ignored .env
 make results   python -m engine.run_all
+make preview   rebuild the dashboard's saved historical scenarios
 make api       uvicorn api.main:app --port 8000
 make dash      streamlit run dashboard/app.py
 make tunnel    ngrok http 8000
 make test      pytest -q
-make reset     restore demo state
+make reset     restore demo state (needs the dispatcher key)
 ```
 
 **Roles (five people, one owner per file):**
