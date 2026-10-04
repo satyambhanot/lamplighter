@@ -2,11 +2,33 @@
 
 from __future__ import annotations
 
+import math
+from itertools import pairwise
+
 import pandas as pd
 import pydeck as pdk
 
 from config import DEPOT_LAT, DEPOT_LON, SCHOOLS_CSV, TRANSIT_STOPS_CSV
 from dashboard.data import DispatchView, capacity_impact
+
+
+def route_arrows(path: list[list[float]]) -> list[dict]:
+    """One chevron per long leg; skip short legs to avoid covering stop markers."""
+    arrows = []
+    for start, end in pairwise(path):
+        latitude = (start[1] + end[1]) / 2
+        east = (end[0] - start[0]) * math.cos(math.radians(latitude))
+        north = end[1] - start[1]
+        if math.hypot(east, north) * 111_195 < 800:
+            continue
+        arrows.append(
+            {
+                "position": [(start[0] + end[0]) / 2, latitude],
+                "angle": math.degrees(math.atan2(north, east)),
+                "label": "›",
+            }
+        )
+    return arrows
 
 
 def ticket_from_selection(state: dict) -> str | None:
@@ -140,6 +162,25 @@ def build_map(
                 width_units=pdk.types.String("pixels"),
                 cap_rounded=True,
                 joint_rounded=True,
+                pickable=False,
+            )
+        )
+        layers.append(
+            pdk.Layer(
+                "TextLayer",
+                id="route-direction",
+                data=route_arrows(path),
+                get_position="position",
+                get_angle="angle",
+                get_text="label",
+                character_set=pdk.types.String("›"),
+                font_family=pdk.types.String("sans-serif"),
+                font_weight=700,
+                get_size=18,
+                get_color=[37, 99, 235, 255],
+                billboard=False,
+                get_text_anchor=pdk.types.String("middle"),
+                get_alignment_baseline=pdk.types.String("center"),
                 pickable=False,
             )
         )
