@@ -415,7 +415,7 @@ lamplighter/
 - [ ] Sat 21:00: feature freeze; record the backup demo video
 - [ ] Sun 10:30: submitted (hard deadline is noon)
 
-**Status, Saturday 20:45.** Engine, API, dashboard and the ElevenLabs voice agent are merged to main, and all 90 tests pass. A real browser call filed a report end to end, so the 13:00 thin slice is now complete. Left before the 21:00 freeze: rebuild the Historical preview with make preview (it still uses the previous tuned weights), rehearse the demo, and record the backup video.
+**Status, Saturday 20:45.** Engine, API, dashboard and the ElevenLabs voice agent are merged to main, and all 90 tests pass. A real browser call filed a report end to end, so the 13:00 thin slice is now complete. The dashboard's Historical preview was rebuilt from the current tuned weights, and all 45 saved scenarios match the live engine. Left before the 21:00 freeze: rehearse the demo and record the backup video.
 
 **Risk register.**
 
