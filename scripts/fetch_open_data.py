@@ -1,5 +1,5 @@
 """Download Calgary school and transit-stop locations from
-data.calgary.ca into data/raw/ (gitignored).
+data.calgary.ca into data/ (committed — see config.SCHOOLS_CSV).
 
 Run with: python -m scripts.fetch_open_data
 

@@ -19,7 +19,14 @@ def _features() -> pd.DataFrame:
     )
 
 
-WEIGHTS = {"w_age": 1.0, "w_damage": 1.0, "w_school": 1.0, "w_transit": 0.5, "w_repeat": 0.5, "w_cluster": 0.25}
+WEIGHTS = {
+    "w_age": 1.0,
+    "w_damage": 1.0,
+    "w_school": 1.0,
+    "w_transit": 0.5,
+    "w_repeat": 0.5,
+    "w_cluster": 0.25,
+}
 
 
 def test_score_higher_for_damage_school_repeat() -> None:

@@ -8,6 +8,7 @@ Jul-Aug is held out for reporting.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -28,6 +29,7 @@ def random_search(
     budget_min: int,
     n_trials: int,
     seed: int,
+    log_path: Path = TUNING_LOG_CSV,
 ) -> dict[str, float]:
     """Search policy weights that minimize risk-weighted dark nights on
     the tuning window (tie-break: maximize fixes per crew-hour).
@@ -35,7 +37,7 @@ def random_search(
     Each trial replays the full ticket history (so the queue carries
     realistic state into the tuning window) but is scored only on
     config.TUNE_START..TUNE_END. Logs every trial's weights and
-    tuning-window metrics to TUNING_LOG_CSV as it goes.
+    tuning-window metrics to ``log_path`` as it goes.
 
     Args:
         tickets: Output of load_tickets().
@@ -43,6 +45,10 @@ def random_search(
         budget_min: Weekly crew minutes.
         n_trials: Number of random weight sets to try.
         seed: RNG seed, for a reproducible search.
+        log_path: Where to write the trial log. Defaults to the real
+            committed TUNING_LOG_CSV — tests must override this with a
+            tmp_path so a small n_trials run doesn't clobber the real
+            200-trial log.
 
     Returns:
         The best-performing weights dict, same shape as
@@ -58,7 +64,7 @@ def random_search(
     for trial in range(n_trials):
         weights = {name: float(rng.uniform(0, WEIGHT_MAX)) for name in WEIGHT_NAMES}
         policy = make_score_policy(layers, weights)
-        result = simulate(tickets, policy, budget_min, window=window)
+        result = simulate(tickets, policy, budget_min, window=window, layers=layers)
 
         key = (result.risk_weighted_dark_nights, -result.fixes_per_crew_hour)
         if best_key is None or key < best_key:
@@ -76,8 +82,8 @@ def random_search(
         if (trial + 1) % 50 == 0:
             logger.info("Tuning trial %d/%d, best so far: %.1f", trial + 1, n_trials, best_key[0])
 
-    pd.DataFrame(trial_rows).to_csv(TUNING_LOG_CSV, index=False)
-    logger.info("Wrote %d trials to %s", n_trials, TUNING_LOG_CSV)
+    pd.DataFrame(trial_rows).to_csv(log_path, index=False)
+    logger.info("Wrote %d trials to %s", n_trials, log_path)
 
     assert best_weights is not None
     return best_weights

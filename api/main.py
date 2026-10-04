@@ -1,35 +1,55 @@
-"""FastAPI routes only — all logic lives in api/service.py.
-
-Run with: uvicorn api.main:app --port 8000 --reload
-"""
+"""FastAPI transport for revisioned dispatch and confirmed crew work."""
 
 from __future__ import annotations
 
+import hmac
 import os
 import sqlite3
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
+from typing import Literal
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.responses import JSONResponse
 
-from api import db
+from api import db, seed, service
 from api.schemas import (
+    ConfirmedPlan,
+    ConfirmRequest,
+    DispatchResponse,
     EventItem,
     FixedResponse,
     HealthResponse,
+    HistoryResponse,
     PlanResponse,
     QueueItem,
+    RepairRequest,
     ReportRequest,
     ReportResponse,
     StatusResponse,
 )
-from config import VOICE_SHARED_SECRET_HEADER
+from config import ROOT_DIR, VOICE_SHARED_SECRET_HEADER
 
-app = FastAPI(title="Lamplighter API")
+load_dotenv(ROOT_DIR / ".env")
 
 
-@contextmanager
-def _connection() -> Iterator[sqlite3.Connection]:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db.init_db()
+    conn = db.get_connection()
+    try:
+        service.runtime()
+        seed.ensure_demo_state(conn)
+    finally:
+        conn.close()
+    yield
+
+
+app = FastAPI(title="Lamplighter API", lifespan=lifespan)
+
+
+def get_db() -> Iterator[sqlite3.Connection]:
     conn = db.get_connection()
     try:
         yield conn
@@ -37,58 +57,110 @@ def _connection() -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
-def get_db() -> Iterator[sqlite3.Connection]:
-    with _connection() as conn:
-        yield conn
+def _secret(value: str | None, name: str) -> None:
+    expected = os.environ.get(name)
+    if not expected or value is None or not hmac.compare_digest(value, expected):
+        raise HTTPException(status_code=401, detail="Missing or invalid access key.")
 
 
 def require_voice_secret(secret: str | None = Header(default=None, alias=VOICE_SHARED_SECRET_HEADER)) -> None:
-    """Voice tool calls must send the shared secret header."""
-    expected = os.environ.get("VOICE_SHARED_SECRET")
-    if not expected or secret != expected:
-        raise HTTPException(status_code=401, detail="missing or invalid voice secret")
+    _secret(secret, "VOICE_SHARED_SECRET")
 
 
-@app.on_event("startup")
-def on_startup() -> None:
-    db.init_db()
+def require_dispatch_secret(
+    secret: str | None = Header(default=None, alias="X-Lamplighter-Dispatcher-Secret"),
+) -> None:
+    _secret(secret, "DISPATCH_SHARED_SECRET")
+
+
+@app.exception_handler(service.Conflict)
+async def conflict(request, exc):
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(service.NotFound)
+async def not_found(request, exc):
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
 @app.get("/health", response_model=HealthResponse)
-def health() -> HealthResponse:
+def health(conn: sqlite3.Connection = Depends(get_db)) -> HealthResponse:
+    conn.execute("SELECT revision FROM dispatch_state WHERE id=1").fetchone()
     return HealthResponse(status="ok")
 
 
-@app.post("/report", response_model=ReportResponse, dependencies=[Depends(require_voice_secret)])
-def report(req: ReportRequest, conn: sqlite3.Connection = Depends(get_db)) -> ReportResponse:
-    raise NotImplementedError("Phase 6")
-
-
-@app.get("/status", response_model=StatusResponse, dependencies=[Depends(require_voice_secret)])
-def status(phone: str, conn: sqlite3.Connection = Depends(get_db)) -> StatusResponse:
-    raise NotImplementedError("Phase 6")
+@app.get("/dispatch", response_model=DispatchResponse)
+def dispatch(
+    policy: Literal["fifo", "v1", "tuned"] = "tuned",
+    budget_pct: float = Query(default=1.0, ge=0.5, le=1.2, allow_inf_nan=False),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> DispatchResponse:
+    return service.dispatch_snapshot(conn, policy, budget_pct)
 
 
 @app.get("/queue", response_model=list[QueueItem])
 def queue(conn: sqlite3.Connection = Depends(get_db)) -> list[QueueItem]:
-    raise NotImplementedError("Phase 6")
+    return service.dispatch_snapshot(conn, "tuned", 1.0).queue
 
 
 @app.get("/plan", response_model=PlanResponse)
-def plan(budget_pct: float = 1.0, policy: str = "tuned", conn: sqlite3.Connection = Depends(get_db)) -> PlanResponse:
-    raise NotImplementedError("Phase 6")
+def plan(
+    policy: Literal["fifo", "v1", "tuned"] = "tuned",
+    budget_pct: float = Query(default=1.0, ge=0.5, le=1.2, allow_inf_nan=False),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> PlanResponse:
+    return service.build_plan(conn, budget_pct, policy)
 
 
 @app.get("/events", response_model=list[EventItem])
-def events(since: str = "1970-01-01T00:00:00", conn: sqlite3.Connection = Depends(get_db)) -> list[EventItem]:
-    raise NotImplementedError("Phase 6")
+def events(since: str = "1970", conn: sqlite3.Connection = Depends(get_db)) -> list[EventItem]:
+    return [EventItem(**dict(row)) for row in db.get_events_since(conn, since)]
 
 
-@app.post("/fixed/{ticket_id}", response_model=FixedResponse)
-def fixed(ticket_id: str, conn: sqlite3.Connection = Depends(get_db)) -> FixedResponse:
-    raise NotImplementedError("Phase 6")
+@app.get(
+    "/lights/{ticket_id}/history",
+    response_model=HistoryResponse,
+    dependencies=[Depends(require_dispatch_secret)],
+)
+def history(ticket_id: str, conn: sqlite3.Connection = Depends(get_db)) -> HistoryResponse:
+    return service.history(conn, ticket_id)
 
 
-@app.post("/demo/reset")
-def demo_reset(conn: sqlite3.Connection = Depends(get_db)) -> dict[str, str]:
-    raise NotImplementedError("Phase 6")
+@app.post("/plans/confirm", response_model=ConfirmedPlan, dependencies=[Depends(require_dispatch_secret)])
+def confirm(req: ConfirmRequest, conn: sqlite3.Connection = Depends(get_db)) -> ConfirmedPlan:
+    return service.confirm_plan(conn, req)
+
+
+@app.post("/fixed/{ticket_id}", response_model=FixedResponse, dependencies=[Depends(require_dispatch_secret)])
+def fixed(ticket_id: str, req: RepairRequest, conn: sqlite3.Connection = Depends(get_db)) -> FixedResponse:
+    return service.mark_fixed(conn, ticket_id, req)
+
+
+@app.post("/report", response_model=ReportResponse, dependencies=[Depends(require_voice_secret)])
+def report(req: ReportRequest, conn: sqlite3.Connection = Depends(get_db)) -> ReportResponse:
+    try:
+        return service.report_light(conn, req.phone, req.location_text, req.description)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Reporting is not configured.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/status", response_model=StatusResponse, dependencies=[Depends(require_voice_secret)])
+def status(phone: str, conn: sqlite3.Connection = Depends(get_db)) -> StatusResponse:
+    try:
+        result = service.check_status(conn, phone)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Reporting is not configured.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="No report was found for this number.")
+    return result
+
+
+@app.post("/demo/reset", dependencies=[Depends(require_dispatch_secret)])
+def reset(conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    with db.transaction(conn, write=True):
+        seed.build_demo_state(conn)
+    return {"status": "reset"}

@@ -64,15 +64,19 @@ def _crew_cut_table(full: RunResult, cut: RunResult) -> pd.DataFrame:
     """Communities that lost visits when budget drops to CREW_CUT_BUDGET_PCT,
     and the extra risk-weighted dark nights that costs each one.
     """
-    combined = pd.DataFrame(
-        {"fixed_full": full.fixed_by_community, "fixed_cut": cut.fixed_by_community}
-    ).fillna(0).astype(int)
+    combined = (
+        pd.DataFrame({"fixed_full": full.fixed_by_community, "fixed_cut": cut.fixed_by_community})
+        .fillna(0)
+        .astype(int)
+    )
     combined["lost_visits"] = combined["fixed_full"] - combined["fixed_cut"]
 
     dark_diff = (cut.dark_nights_by_community - full.dark_nights_by_community).fillna(0).round(1)
     combined["extra_risk_weighted_dark_nights"] = dark_diff.reindex(combined.index).fillna(0.0)
 
-    lost = combined[combined["lost_visits"] > 0].sort_values("extra_risk_weighted_dark_nights", ascending=False)
+    lost = combined[combined["lost_visits"] > 0].sort_values(
+        "extra_risk_weighted_dark_nights", ascending=False
+    )
     return lost.reset_index().rename(columns={"index": "comm_name"})
 
 
@@ -99,7 +103,15 @@ def _plot_policy_comparison(summary: pd.DataFrame) -> None:
         if policy != "FIFO":
             pct = 100 * (fifo_value - value) / fifo_value
             label += f"\n(-{pct:.1f}%)"
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), label, ha="center", va="bottom", color=INK, fontsize=10)
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height(),
+            label,
+            ha="center",
+            va="bottom",
+            color=INK,
+            fontsize=10,
+        )
 
     ax.set_ylabel("Risk-weighted dark nights (Jul-Aug test window)", color=INK)
     ax.set_title("FIFO vs v1 vs tuned", color=INK, fontsize=13, loc="left")
@@ -158,7 +170,10 @@ def main() -> None:
     # Headline comparison: held-out Jul-Aug test window only, so the
     # tuned policy isn't graded on data it was tuned on.
     test_window = (TEST_START, TEST_END)
-    test_results = {name: simulate(tickets, policy, WEEKLY_CREW_MINUTES, window=test_window) for name, policy in policies.items()}
+    test_results = {
+        name: simulate(tickets, policy, WEEKLY_CREW_MINUTES, window=test_window, layers=layers)
+        for name, policy in policies.items()
+    }
     for name, result in test_results.items():
         logger.info(
             "%s: %d fixed, %.1f risk-weighted dark nights, %.3f fixes/crew-hour, %d still dark",
@@ -174,19 +189,24 @@ def main() -> None:
     logger.info("Wrote %s", SUMMARY_CSV)
 
     # Crew cut: tuned policy, full run, 100% vs CREW_CUT_BUDGET_PCT.
-    full_tuned = simulate(tickets, policies["tuned"], WEEKLY_CREW_MINUTES)
+    full_tuned = simulate(tickets, policies["tuned"], WEEKLY_CREW_MINUTES, layers=layers)
     cut_budget = round(WEEKLY_CREW_MINUTES * CREW_CUT_BUDGET_PCT)
-    cut_tuned = simulate(tickets, policies["tuned"], cut_budget)
+    cut_tuned = simulate(tickets, policies["tuned"], cut_budget, layers=layers)
     crew_cut_df = _crew_cut_table(full_tuned, cut_tuned)
     crew_cut_df.to_csv(CREW_CUT_COMMUNITIES_CSV, index=False)
-    logger.info("Crew cut (%.0f%% budget): %d communities lost visits. Wrote %s", CREW_CUT_BUDGET_PCT * 100, len(crew_cut_df), CREW_CUT_COMMUNITIES_CSV)
+    logger.info(
+        "Crew cut (%.0f%% budget): %d communities lost visits. Wrote %s",
+        CREW_CUT_BUDGET_PCT * 100,
+        len(crew_cut_df),
+        CREW_CUT_COMMUNITIES_CSV,
+    )
 
     # Sensitivity: all three policies at each budget level, test window.
     sensitivity_rows = []
     for pct in SENSITIVITY_BUDGET_PCTS:
         budget = round(WEEKLY_CREW_MINUTES * pct)
         for name, policy in policies.items():
-            result = simulate(tickets, policy, budget, window=test_window)
+            result = simulate(tickets, policy, budget, window=test_window, layers=layers)
             sensitivity_rows.append(
                 {
                     "budget_pct": pct,

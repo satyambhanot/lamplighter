@@ -47,7 +47,9 @@ def test_dispatcher_note_crew_cut_mentioned(monkeypatch) -> None:
 
 def test_dispatcher_note_singular_grammar(monkeypatch) -> None:
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    plan = pd.DataFrame({"is_damage": [True], "near_school": [False], "near_transit": [False], "comm_name": ["DOVER"]})
+    plan = pd.DataFrame(
+        {"is_damage": [True], "near_school": [False], "near_transit": [False], "comm_name": ["DOVER"]}
+    )
     note = dispatcher_note(plan, pd.DataFrame())
     assert "1 light." in note
     assert "1 damage report" in note

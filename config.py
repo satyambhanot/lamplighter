@@ -18,8 +18,11 @@ RAW_DATA_DIR = DATA_DIR / "raw"
 RESULTS_DIR = ROOT_DIR / "results"
 
 TICKETS_CSV = DATA_DIR / "street_lights_311.csv"
-SCHOOLS_CSV = RAW_DATA_DIR / "schools.csv"
-TRANSIT_STOPS_CSV = RAW_DATA_DIR / "transit_stops.csv"
+# Committed (not data/raw/, which is gitignored) so a fresh clone gets the
+# same school/transit layers, and therefore the same scores, without
+# re-running scripts/fetch_open_data.py.
+SCHOOLS_CSV = DATA_DIR / "schools.csv"
+TRANSIT_STOPS_CSV = DATA_DIR / "transit_stops.csv"
 
 # Full City of Calgary 311 export, manually downloaded into data/raw/
 # (gitignored — 1M+ rows, every service type). scripts/prepare_seed_data.py
@@ -129,7 +132,7 @@ DAMAGE_SERVICE_NAME = "Roads - Streetlight Damage"
 
 NOMINATIM_USER_AGENT = "lamplighter-hackathon/1.0 (satyambhanot15@gmail.com)"
 NOMINATIM_RATE_LIMIT_SECONDS = 1.0
-ANTHROPIC_MODEL = "claude-sonnet-5"
+ANTHROPIC_MODEL = "claude-sonnet-5-5"  # Sonnet 5.5 — "claude-sonnet-5" (no minor) isn't a real model id
 
 # Demo addresses tried before Nominatim, so the demo never depends on an
 # outside service. Filled in as the team picks real demo call locations.

@@ -24,7 +24,10 @@ def _neighbours_dark(lights: pd.DataFrame) -> pd.Series:
     if len(lights) < 2:
         return pd.Series(0, index=lights.index)
     tree = build_ball_tree(lights)
-    counts = [len(query_radius(tree, row.latitude, row.longitude, CLUSTER_RADIUS_M)) - 1 for row in lights.itertuples()]
+    counts = [
+        len(query_radius(tree, row.latitude, row.longitude, CLUSTER_RADIUS_M)) - 1
+        for row in lights.itertuples()
+    ]
     return pd.Series(counts, index=lights.index)
 
 

@@ -1,32 +1,71 @@
-"""Geocoding: demo address list first, Nominatim second, cached.
-
-The demo must never depend on an outside service, so config.DEMO_ADDRESSES
-is always checked before any network call. Implemented in Phase 6.
-"""
+"""Demo locations, local cache, then a bounded Calgary geocoder."""
 
 from __future__ import annotations
 
+import logging
+import re
 import sqlite3
+import threading
+import time
+
+import requests
+
+from api import db
+from config import DEMO_ADDRESSES, NOMINATIM_RATE_LIMIT_SECONDS, NOMINATIM_USER_AGENT
+
+logger = logging.getLogger(__name__)
+_lock = threading.Lock()
+_last_request = 0.0
+
+
+def _in_city(lat: float, lon: float) -> bool:
+    return 50.85 <= lat <= 51.25 and -114.35 <= lon <= -113.85
 
 
 def geocode(conn: sqlite3.Connection, location_text: str) -> tuple[float, float] | None:
-    """Resolve free-text location to (lat, lon).
-
-    Order: config.DEMO_ADDRESSES exact/fuzzy match -> geocode_cache table
-    -> Nominatim (rate-limited to config.NOMINATIM_RATE_LIMIT_SECONDS,
-    cached on success).
-
-    Args:
-        conn: Open DB connection, used for the geocode cache.
-        location_text: Caller-provided address or intersection.
-
-    Returns:
-        (lat, lon), or None if nothing could resolve the location — the
-        caller should then set needs_clarification=True rather than error.
-    """
-    raise NotImplementedError("Phase 6")
+    query = " ".join(location_text.casefold().split())
+    if query in DEMO_ADDRESSES:
+        return DEMO_ADDRESSES[query]
+    coordinates = re.fullmatch(r"(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)", query)
+    if coordinates:
+        lat, lon = map(float, coordinates.groups())
+        return (lat, lon) if _in_city(lat, lon) else None
+    cached = db.get_geocode_cache(conn, query)
+    if cached:
+        return cached["lat"], cached["lon"]
+    result = _geocode_nominatim(query)
+    if result:
+        db.set_geocode_cache(conn, query, *result, "nominatim")
+    return result
 
 
 def _geocode_nominatim(location_text: str) -> tuple[float, float] | None:
-    """Call Nominatim directly. Private: always go through geocode()."""
-    raise NotImplementedError("Phase 6")
+    global _last_request
+    with _lock:
+        wait = max(0, NOMINATIM_RATE_LIMIT_SECONDS - (time.monotonic() - _last_request))
+        if wait:
+            time.sleep(wait)
+        _last_request = time.monotonic()
+        try:
+            response = requests.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={
+                    "q": location_text + ", Calgary, Alberta",
+                    "format": "json",
+                    "limit": 1,
+                    "countrycodes": "ca",
+                    "bounded": 1,
+                    "viewbox": "-114.35,51.25,-113.85,50.85",
+                },
+                headers={"User-Agent": NOMINATIM_USER_AGENT},
+                timeout=3,
+            )
+            response.raise_for_status()
+            rows = response.json()
+            if not rows:
+                return None
+            lat, lon = float(rows[0]["lat"]), float(rows[0]["lon"])
+            return (lat, lon) if _in_city(lat, lon) else None
+        except (requests.RequestException, ValueError, TypeError, KeyError, IndexError):
+            logger.warning("Geocoding is unavailable; requesting a clearer location")
+            return None

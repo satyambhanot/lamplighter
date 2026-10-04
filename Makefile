@@ -1,4 +1,4 @@
-.PHONY: setup results api dash tunnel test reset lint
+.PHONY: setup configure results preview api dash tunnel test reset lint
 
 setup:
 	python3 -m venv .venv
@@ -6,6 +6,12 @@ setup:
 
 results:
 	. .venv/bin/activate && python -m engine.run_all
+
+preview:
+	. .venv/bin/activate && python -m scripts.build_dashboard_preview
+
+configure:
+	. .venv/bin/activate && python -m scripts.configure_demo
 
 api:
 	. .venv/bin/activate && uvicorn api.main:app --port 8000 --reload
@@ -20,7 +26,7 @@ test:
 	. .venv/bin/activate && pytest -q
 
 reset:
-	curl -s -X POST http://localhost:8000/demo/reset
+	. .venv/bin/activate && python -m scripts.reset_demo
 
 lint:
 	. .venv/bin/activate && ruff check . && ruff format --check .

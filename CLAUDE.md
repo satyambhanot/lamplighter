@@ -182,7 +182,14 @@ GET  /plan?budget_pct=&policy=
                              minutes_used, skipped_count, note,
                              queue: [QueueItem]}
 GET  /events?since=      -> [{at, type, light_id, message}]
-POST /fixed/{ticket_id}
+GET  /dispatch?budget_pct=&policy=
+                         -> {revision, as_of, queue, plan, baseline,
+                             events, confirmed_plan}
+GET  /lights/{ticket_id}/history -> {ticket_id, history, complete}
+POST /plans/confirm {revision, policy, budget_pct}
+                         -> {id, policy, budget_pct, status, created_at,
+                             remaining_ids, completed_count, visits}
+POST /fixed/{ticket_id} {revision, plan_id}
 POST /demo/reset
 GET  /health
 ```
@@ -193,9 +200,17 @@ intersection. Voice tool calls (`/report`, `/status`) must send a shared
 secret header (`X-Lamplighter-Voice-Secret`); the API rejects calls
 without it.
 
+The dashboard reads `/dispatch` as one SQLite read transaction. Its baseline
+uses the same queue and policy at 100% capacity. Dispatcher writes and report
+history require `X-Lamplighter-Dispatcher-Secret`; `make configure` generates
+local access keys in the ignored `.env`. Confirmation and repair writes use
+immediate transactions and reject stale revisions. Successful retries are
+idempotent. Confirmed stop numbers persist as repairs complete, and new
+reports require a renewed plan review. Startup does not reseed completed work.
+
 `/plan` is read-only: a what-if re-plan of the current queue for the
 dashboard slider, including the dispatcher note. `policy` is fifo, v1,
-or tuned. Event `type` is new, merged, rerank, hazard, fixed, or reset,
+or tuned. Event `type` is new, merged, rerank, hazard, fixed, reset, or plan_confirmed,
 and `message` is human-readable, like "Call merged, light moved from #12
 to #4."
 

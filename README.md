@@ -10,6 +10,7 @@ Full architecture, decisions, and working rules live in
 
 ```bash
 make setup     # create venv, install requirements
+make configure # generate local demo access keys without overwriting existing keys
 make results   # python -m engine.run_all -> results/
 make api       # uvicorn api.main:app --port 8000
 make dash      # streamlit run dashboard/app.py
@@ -20,9 +21,38 @@ make reset     # restore demo state
 
 ## Status
 
-Scaffold only — every module under `engine/` and `api/` currently
-raises `NotImplementedError` with a docstring describing its contract.
-Phases are implemented in order; see CLAUDE.md's "Build order" section.
+The dashboard now supports a linked map, selectable queue rows, report history,
+numbered visits, school/transit layers, and a separate evaluation workspace.
+Planned visits and the waiting backlog have separate searchable tables and CSV
+exports. Capacity impact compares actual membership against a 100% plan for
+the same queue and policy, including visits replaced rather than just net totals.
+
+Start `make api` and `make dash` in separate terminals after `make configure`.
+In **Live dispatch**, review the proposal, acknowledge its order and capacity,
+and confirm it. Select a confirmed light, acknowledge crew completion, and
+mark it repaired. Confirmed stop numbers stay fixed; the proposal recalculates
+remaining work. New reports invalidate confirmation until a new review.
+Dispatcher writes and report history require the local dispatcher key; voice
+report/status requests require the voice key. Keys stay in the ignored `.env`.
+
+The default **Historical preview** uses real Calgary reports and simulated
+repairs. `make preview` rebuilds all 45 saved scenarios. Live dispatch also uses
+the frozen demo planning clock and simulated repairs; it is not field status.
+`make reset` explicitly clears simulated repairs and confirmed plans and
+restores the historical queue. Startup preserves an already completed queue.
+
+`LAMPLIGHTER_API_URL` overrides `http://localhost:8000`. Reads use one revisioned
+snapshot; stale views are marked and cannot perform writes. Conflicting writes
+require a refreshed review; successful retries do not duplicate confirmations
+or repairs. Street-map tiles need internet; preview tables and controls work
+offline. Travel and repair-week estimates are approximate, using straight-line
+travel, weekly batching, and unchanged future workload.
+
+The API business routes are implemented. ElevenLabs agent configuration and
+its end-to-end voice demo remain to be completed.
+
+Saved policy metrics are provisional pending evaluator corrections. See
+[the engineering review](docs/CODE_REVIEW.md) for findings and priorities.
 
 ## Repo layout
 
