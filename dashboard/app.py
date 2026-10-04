@@ -577,7 +577,12 @@ with st.sidebar:
         f'<div class="brand"><span class="brand-mark">{icon("lamp", 21, color="#0e2b42", stroke=2)}</span>'
         '<span class="brand-name">lamplighter</span></div><div class="brand-sub">Street lighting operations</div>'
     )
-    workspace = st.radio("Workspace", ["Dispatch", "Evaluation", "Sensors"], key="workspace")
+    workspace = st.radio(
+        "Workspace",
+        ["Dispatch", "Evaluation", "Sensors"],
+        format_func=lambda w: "Sensors (simulated)" if w == "Sensors" else w,
+        key="workspace",
+    )
     markup('<div class="sidebar-label">DATA SOURCE</div>')
     source = st.selectbox(
         "Data source", ["Historical preview", "Live dispatch"], key="source", on_change=change_source
@@ -607,12 +612,13 @@ historical = source == "Historical preview"
 WORKSPACE_TITLES = {
     "Dispatch": "This week’s plan",
     "Evaluation": "Policy evaluation",
-    "Sensors": "Pole sensors",
+    "Sensors": "Smart-pole network (simulated)",
 }
 WORKSPACE_BLURBS = {
     "Dispatch": "Review priorities. Set crew capacity. Dispatch with confidence.",
     "Evaluation": "Review priorities. Set crew capacity. Dispatch with confidence.",
-    "Sensors": "Watch pole readings. Catch faults before residents call. Send them to dispatch.",
+    "Sensors": "A simulated pole network that watches its own lamps and can file its own report "
+    "the moment it catches a fault, before a resident ever calls.",
 }
 markup(
     f'<div class="page-head" data-workspace="{workspace}"><div><div class="eyebrow">OPERATIONS / '
