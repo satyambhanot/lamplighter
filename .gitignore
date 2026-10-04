@@ -226,3 +226,6 @@ data/raw/*
 api/*.db
 api/*.db-wal
 api/*.db-shm
+
+# Editor local-history backups (can contain copies of .env)
+.history/
