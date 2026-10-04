@@ -19,6 +19,7 @@ import os
 import requests
 from dotenv import load_dotenv
 
+from api.service import check_hazard
 from voice.setup_agent import AGENT_ID_KEY, API_BASE_URL, ENV_PATH
 
 logger = logging.getLogger(__name__)
@@ -50,10 +51,40 @@ SCENARIOS = {
         "driver is bleeding and not moving. Tell the agent this in your first answer and ask what to do. "
         "Follow the agent's instructions and end the call."
     ),
+    "conrich": (
+        "You are calling about a street light that is out near Khalsa School on Conrich Road, at Township Road "
+        "250. If asked, say it is in Conrich. Follow whatever the agent suggests and end the call."
+    ),
+    "no_hazard": (
+        "You are calling to report a street light that is out near King George School. Confirm the location "
+        "when it is read back. When asked about hazards, say clearly: the pole is standing, there are no "
+        "exposed wires and no sparking. Listen to the answer, thank the agent, and end the call."
+    ),
+    "not_found": (
+        "You are calling about a street light that is out near the Glenbrook corner store. Confirm it when "
+        "read back and say there are no hazards. If the agent cannot find it, say the street address is "
+        "3401 37 Street SW. Listen to the answer and end the call."
+    ),
 }
 
 # The agent must not call any tool in these scenarios.
-NO_TOOL_SCENARIOS = {"other_city", "emergency"}
+NO_TOOL_SCENARIOS = {"other_city", "emergency", "conrich"}
+# The API's hazard check must not flag the description sent to report_light.
+NO_HAZARD_WORDS_SCENARIOS = {"no_hazard", "not_found"}
+# After a not-found result the agent must not ask for an intersection.
+NO_INTERSECTION_SCENARIOS = {"not_found"}
+
+# The API's answer when a location cannot be geocoded.
+NOT_FOUND = {
+    "ticket_id": None,
+    "merged": False,
+    "hazard": False,
+    "needs_clarification": True,
+    "rank": None,
+    "old_rank": None,
+    "expected_fix_date": None,
+    "message": "Please provide a street address or a well-known place nearby.",
+}
 
 # Real responses recorded from this API on Oct 3 (demo clock Aug 24, 2026).
 MOCK_RESULTS = {
@@ -99,9 +130,23 @@ MOCK_RESULTS = {
             "rank": None,
             "old_rank": None,
             "expected_fix_date": None,
-            "message": "Please provide the nearest intersection or a precise location.",
+            "message": "Please provide a street address or a well-known place nearby.",
         }
     },
+    "conrich": {"report_light": NOT_FOUND},
+    "no_hazard": {
+        "report_light": {
+            "ticket_id": "L-015a9ab2270c",
+            "merged": False,
+            "hazard": False,
+            "needs_clarification": False,
+            "rank": 10,
+            "old_rank": None,
+            "expected_fix_date": "2026-09-01",
+            "message": "New report entered at priority #10.",
+        }
+    },
+    "not_found": {"report_light": NOT_FOUND},
     "emergency": {
         "report_light": {
             "ticket_id": "L-de630528e6b0",
@@ -182,6 +227,28 @@ def main() -> None:
         ]
         verdict = "PASS: no tool called" if not called else f"FAIL: agent called {called}"
         print(verdict)
+    turns = result.get("simulated_conversation", [])
+    if args.scenario in NO_HAZARD_WORDS_SCENARIOS:
+        descriptions = [
+            json.loads(call.get("params_as_json") or "{}").get("description", "")
+            for turn in turns
+            for call in turn.get("tool_calls") or []
+            if call.get("tool_name") == "report_light"
+        ]
+        flagged = [d for d in descriptions if check_hazard(d)]
+        if not descriptions:
+            print("FAIL: report_light was never called")
+        else:
+            print("PASS: the API would not flag it as a hazard" if not flagged else f"FAIL: {flagged}")
+    if args.scenario in NO_INTERSECTION_SCENARIOS:
+        seen_result, asked = False, []
+        for turn in turns:
+            if turn.get("tool_results"):
+                seen_result = True
+            message = (turn.get("message") or "").lower()
+            if seen_result and turn.get("role") == "agent" and "intersection" in message:
+                asked.append(turn["message"])
+        print("PASS: never asked for an intersection" if not asked else f"FAIL: {asked}")
 
 
 if __name__ == "__main__":
