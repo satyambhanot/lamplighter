@@ -19,6 +19,17 @@ make test      # pytest -q
 make reset     # restore demo state
 ```
 
+If the project is in a cloud-synced folder and `.venv` stalls while importing
+packages, create the environment outside that folder and pass its path to
+`make`:
+
+```bash
+make setup VENV=/tmp/lamplighter-venv
+make configure VENV=/tmp/lamplighter-venv
+make api VENV=/tmp/lamplighter-venv       # terminal 1
+make dash VENV=/tmp/lamplighter-venv      # terminal 2
+```
+
 ## Status
 
 The dispatch workspace puts urgent hazards, route status, a searchable worklist,

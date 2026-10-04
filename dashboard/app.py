@@ -54,7 +54,7 @@ def panel(title: str, detail: str = "", icon_name: str = "") -> None:
 def empty(title: str, detail: str, icon_name: str = "search") -> None:
     markup(
         f'<div class="empty-state">{icon(icon_name, 26)}<strong>{html.escape(title)}</strong>'
-        f'<p>{html.escape(detail)}</p></div>'
+        f"<p>{html.escape(detail)}</p></div>"
     )
 
 
@@ -67,7 +67,11 @@ def metric(label: str, value: str, detail: str, accent: bool = False, icon_name:
 
 
 def skeleton_cards(n: int = 3) -> None:
-    markup('<div style="display:flex;gap:16px">' + '<div class="skeleton skeleton-card" style="flex:1"></div>' * n + "</div>")
+    markup(
+        '<div style="display:flex;gap:16px">'
+        + '<div class="skeleton skeleton-card" style="flex:1"></div>' * n
+        + "</div>"
+    )
 
 
 @st.cache_data(show_spinner=False, ttl=30)
@@ -210,7 +214,9 @@ def render_detail(view: DispatchView, historical: bool, stale: bool) -> None:
         label_visibility="collapsed",
     )
     if not ticket:
-        empty("Select a light", "Inspect its reports, priority reasons, and planned route position.", "map-pin")
+        empty(
+            "Select a light", "Inspect its reports, priority reasons, and planned route position.", "map-pin"
+        )
         return
     if ticket in completed:
         visit = completed[ticket]
@@ -650,7 +656,9 @@ def dispatch() -> None:
     with st.container(key="overview-metrics"):
         a, b, c = st.columns(3)
         with a:
-            metric("Planned visits", str(view.plan.lights_planned), "Selected for the crew route", True, "route")
+            metric(
+                "Planned visits", str(view.plan.lights_planned), "Selected for the crew route", True, "route"
+            )
         with b:
             metric(
                 "Crew-hours allocated",
@@ -659,7 +667,12 @@ def dispatch() -> None:
                 icon_name="clock",
             )
         with c:
-            metric("Waiting backlog", str(view.plan.skipped_count), "Carried to a later repair week", icon_name="alert-triangle")
+            metric(
+                "Waiting backlog",
+                str(view.plan.skipped_count),
+                "Carried to a later repair week",
+                icon_name="alert-triangle",
+            )
     render_review(view, historical, stale)
     communities = ["All communities"] + sorted({item.comm_name for item in view.queue})
     if st.session_state.get("community", "All communities") not in communities:

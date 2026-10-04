@@ -1,32 +1,35 @@
 .PHONY: setup configure results preview api dash tunnel test reset lint
 
+VENV ?= .venv
+PYTHON := $(VENV)/bin/python
+
 setup:
-	python3 -m venv .venv
-	. .venv/bin/activate && pip install -r requirements.txt
+	python3 -m venv $(VENV)
+	$(PYTHON) -m pip install -r requirements.txt
 
 results:
-	. .venv/bin/activate && python -m engine.run_all
+	$(PYTHON) -m engine.run_all
 
 preview:
-	. .venv/bin/activate && python -m scripts.build_dashboard_preview
+	$(PYTHON) -m scripts.build_dashboard_preview
 
 configure:
-	. .venv/bin/activate && python -m scripts.configure_demo
+	$(PYTHON) -m scripts.configure_demo
 
 api:
-	. .venv/bin/activate && uvicorn api.main:app --port 8000 --reload
+	$(PYTHON) -m uvicorn api.main:app --port 8000 --reload
 
 dash:
-	. .venv/bin/activate && streamlit run dashboard/app.py
+	$(PYTHON) -m streamlit run dashboard/app.py --server.address 127.0.0.1 --server.headless true
 
 tunnel:
 	ngrok http 8000
 
 test:
-	. .venv/bin/activate && pytest -q
+	$(PYTHON) -m pytest -q
 
 reset:
-	. .venv/bin/activate && python -m scripts.reset_demo
+	$(PYTHON) -m scripts.reset_demo
 
 lint:
-	. .venv/bin/activate && ruff check . && ruff format --check .
+	$(PYTHON) -m ruff check . && $(PYTHON) -m ruff format --check .
