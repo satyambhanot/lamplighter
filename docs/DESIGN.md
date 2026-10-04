@@ -223,7 +223,7 @@ The search tries 200 random weight sets (seed 42, each weight drawn from 0 to 2)
 **Conversation rules.**
 
 - **Emergencies come first.** If anyone is hurt or in danger, or the caller describes any emergency (a crash, fire, crime, medical problem or gas smell), the agent tells them to hang up and call 911 right away and files nothing. This rule overrides every other rule.
-- **Calgary only.** A light in another city or town is not filed; the agent points the caller to that municipality's 311. It knows nearby places that are not Calgary (Conrich, Chestermere, Airdrie, and Township or Range Roads in Rocky View County), so a call about Khalsa School in Conrich is redirected at once.
+- **Calgary only.** A light in another city or town is not filed; the agent points the caller to that municipality's 311. It knows nearby places that are not Calgary (Chestermere, Airdrie, and Township or Range Roads in Rocky View County). One exception is in the service area for the demo: Khalsa School on Conrich Road, a known demo location that is filed normally.
 - Always read the location back in the caller's own words, never adding a street or quadrant, and confirm it.
 - Always ask about downed poles or exposed wires before filing. Hazards are flagged for a dispatcher and never enter the routine queue; the caller is told to stay away and call 911 if anyone is in danger.
 - When a location is not found, the agent asks for a street address or a well-known place nearby, never an intersection, and suggests 311 after two failed tries.
@@ -370,7 +370,7 @@ lamplighter/
 
 ## 9. Testing Strategy
 
-**Unit testing (pytest).** 121 tests across the engine, API, hazard check, geocoding, sensors, dashboard and voice setup; make test runs them in about 16 seconds. They include:
+**Unit testing (pytest).** 125 tests across the engine, API, hazard check, geocoding, sensors, dashboard and voice setup; make test runs them in about 16 seconds. They include:
 
 - The score formula returns the expected values, such as 5.25 for the damaged pole and 4.0 for the plain light in Section 3.
 - Two calls 100 m apart merge into one light.
@@ -398,7 +398,7 @@ lamplighter/
 
 - scripts/fake\_call.py hits POST /report, and the light appears on the map with a re-rank in the activity log.
 - An ElevenLabs browser test call reaches the API through ngrok and hears back a rank and fix week. Passed on October 3 (voice/sample\_transcript.md).
-- make voice-test plays eight simulated callers against the real agent: report, status, hazard, other city, emergency, Conrich, no hazard and not found. ElevenLabs simulations mock tool results, so these check how the agent talks and reads results. The other-city, emergency and Conrich calls must end with no report filed, the no-hazard calls must not be flagged by the API's hazard check, and the not-found call must never ask for an intersection; all pass. The hazard call also runs five times in a row and must ask the safety question before filing. These tests and a real Sunday call found and fixed five problems: an invented street on read-back, "near King George School" failing to geocode, Conrich not recognised as outside Calgary, requests for intersections the geocoder cannot resolve, and a false hazard when a caller said "no exposed wires".
+- make voice-test plays eight simulated callers against the real agent: report, status, hazard, other city, emergency, Conrich, no hazard and not found. ElevenLabs simulations mock tool results, so these check how the agent talks and reads results. The other-city and emergency calls must end with no report filed, the Conrich call must be filed at Khalsa School, the no-hazard calls must not be flagged by the API's hazard check, and the not-found call must never ask for an intersection; all pass. The hazard call also runs five times in a row and must ask the safety question before filing. These tests and a real Sunday call found and fixed six problems: an invented street on read-back, "near King George School" failing to geocode, Khalsa School not found by any geocoder, a different place filed without being read back, requests for intersections the geocoder cannot resolve, and a false hazard when a caller said "no exposed wires".
 - make reset restores the demo state before every rehearsal.
 - A fresh clone runs with make setup; a piece is only "done" when it does.
 
@@ -416,7 +416,7 @@ lamplighter/
 - [ ] Sat 21:00: feature freeze; record the backup demo video
 - [ ] Sun 10:30: submitted (hard deadline is noon)
 
-**Status, Sunday 11:20.** Everything is merged to main and all 121 tests pass: engine, API, dashboard (including the pole-sensor workspace and urgent hazard handoffs) and the ElevenLabs voice agent. A real call on Sunday morning about Khalsa School in Conrich exposed three problems, now fixed: Conrich was not recognised as outside Calgary, the agent kept asking for intersections the geocoder cannot resolve, and "no exposed wires" was flagged as a hazard. Left before the noon deadline: rehearse, record the backup video if it is not done, and submit.
+**Status, Sunday 11:20.** Everything is merged to main and the tests pass: engine, API, dashboard (including the pole-sensor workspace and urgent hazard handoffs) and the ElevenLabs voice agent. A real call on Sunday morning about Khalsa School in Conrich exposed three problems, now fixed: Khalsa School could not be located (it is now a known demo location on Conrich Road), the agent kept asking for intersections the geocoder cannot resolve and once filed a different place without reading it back, and "no exposed wires" was flagged as a hazard. 125 tests now pass. Left before the noon deadline: rehearse, record the backup video if it is not done, and submit.
 
 **Risk register.**
 
@@ -424,7 +424,7 @@ lamplighter/
 | --- | --- |
 | Venue Wi-Fi or ngrok fails | Run fake\_call.py live and show the recorded call |
 | An address cannot be geocoded | Demo address list, then ask for a street address or landmark |
-| A caller is just outside Calgary (Conrich, Chestermere, Airdrie) | The agent says the light is outside the City and points to that county or town; nothing is filed |
+| A caller is just outside Calgary (Chestermere, Airdrie) | The agent says the light is outside the City and points to that county or town; nothing is filed |
 | Tuned weights do not beat version 1 on the test window | Report it honestly; the gain over FIFO is still the story |
 | A judge asks how long lights really stay dark | State the assumption: a light stays dark from its first report until the crew fixes it, and "closed" is never read as fixed |
 | A judge calls the result circular | Show the strategy and scorecard are separate, and the result holds on unseen weeks at three crew sizes |

@@ -239,8 +239,12 @@ the real wall clock so `/events?since=` works.
   poles or exposed wires before filing.
 - Emergencies come first: anyone hurt or in danger is told to hang up and
   call 911, and nothing is filed.
-- Calgary only: places outside the city (Conrich, Chestermere, Airdrie,
-  Township and Range Roads) are pointed to their own county or town.
+- Calgary only: places outside the city (Chestermere, Airdrie, Township
+  and Range Roads) are pointed to their own county or town. Exception:
+  Khalsa School on Conrich Road is a demo service location
+  (`DEMO_ADDRESSES`) and is filed normally.
+- Every location, including a new one after a not-found result, is read
+  back and confirmed before `report_light` is called.
 - The caller is never asked for a phone number (the tools send a fixed
   demo number) and never asked for an intersection (Nominatim cannot
   resolve intersections); the agent asks for a street address or landmark.
