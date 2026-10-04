@@ -68,7 +68,9 @@ SCENARIOS = {
 }
 
 # The agent must not call any tool in these scenarios.
-NO_TOOL_SCENARIOS = {"other_city", "emergency", "conrich"}
+NO_TOOL_SCENARIOS = {"other_city", "emergency"}
+# Khalsa School on Conrich Road is a demo service location and must be filed.
+MUST_FILE_SCENARIOS = {"conrich"}
 # The API's hazard check must not flag the description sent to report_light.
 NO_HAZARD_WORDS_SCENARIOS = {"no_hazard", "not_found"}
 # After a not-found result the agent must not ask for an intersection.
@@ -133,7 +135,18 @@ MOCK_RESULTS = {
             "message": "Please provide a street address or a well-known place nearby.",
         }
     },
-    "conrich": {"report_light": NOT_FOUND},
+    "conrich": {
+        "report_light": {
+            "ticket_id": "L-khalsa",
+            "merged": False,
+            "hazard": False,
+            "needs_clarification": False,
+            "rank": 27,
+            "old_rank": None,
+            "expected_fix_date": "2026-09-03",
+            "message": "New report entered at priority #27.",
+        }
+    },
     "no_hazard": {
         "report_light": {
             "ticket_id": "L-015a9ab2270c",
@@ -228,6 +241,15 @@ def main() -> None:
         verdict = "PASS: no tool called" if not called else f"FAIL: agent called {called}"
         print(verdict)
     turns = result.get("simulated_conversation", [])
+    if args.scenario in MUST_FILE_SCENARIOS:
+        filed = [
+            json.loads(call.get("params_as_json") or "{}").get("location_text", "")
+            for turn in turns
+            for call in turn.get("tool_calls") or []
+            if call.get("tool_name") == "report_light"
+        ]
+        ok = any("khalsa" in place.lower() for place in filed)
+        print(f"PASS: filed at {filed}" if ok else f"FAIL: not filed at Khalsa School ({filed})")
     if args.scenario in NO_HAZARD_WORDS_SCENARIOS:
         descriptions = [
             json.loads(call.get("params_as_json") or "{}").get("description", "")

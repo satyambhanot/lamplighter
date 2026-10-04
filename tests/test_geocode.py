@@ -27,3 +27,20 @@ def test_phrased_demo_address_skips_nominatim(monkeypatch):
 
     monkeypatch.setattr(geocode, "_geocode_nominatim", fail)
     assert geocode.geocode(None, "near King George School") == geocode.DEMO_ADDRESSES["king george school"]
+
+
+@pytest.mark.parametrize(
+    ("spoken", "name"),
+    [
+        ("Khalsa School on Condrich Road and Township Road intersection", "khalsa school"),
+        ("near the Khalsa School", "khalsa school"),
+        ("King George School by the soccer field", "king george school"),
+        ("outside City Hall on Macleod Trail", "city hall"),
+    ],
+)
+def test_demo_name_inside_a_longer_phrase_resolves_offline(monkeypatch, spoken, name):
+    def fail(*args):
+        raise AssertionError("Nominatim should not be called for a demo address")
+
+    monkeypatch.setattr(geocode, "_geocode_nominatim", fail)
+    assert geocode.geocode(None, spoken) == geocode.DEMO_ADDRESSES[name]

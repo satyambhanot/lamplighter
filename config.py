@@ -144,6 +144,11 @@ DEMO_ADDRESSES: dict[str, tuple[float, float]] = {
     "arbour lake middle school": (51.1346577, -114.2091915),
     "st. cecilia elementary school": (50.9653028, -114.0504253),
     "city hall": (51.0460, -114.0574),  # Wikipedia: 51°02'46"N 114°03'27"W
+    # Khalsa School Calgary, 245228 Conrich Road (Rocky View County, just east of
+    # the city). Nominatim has no entry for the school; this is where Conrich Road
+    # (OSM, lon -113.8654) meets Township Road 250 (OSM, lat 51.0963), which is
+    # where callers place it. Approximate to within a few hundred metres.
+    "khalsa school": (51.0963, -113.8654),
 }
 
 # --- Voice / API security ------------------------------------------------------

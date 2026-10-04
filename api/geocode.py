@@ -35,10 +35,25 @@ def _in_city(lat: float, lon: float) -> bool:
     return 50.85 <= lat <= 51.25 and -114.35 <= lon <= -113.85
 
 
-def geocode(conn: sqlite3.Connection, location_text: str) -> tuple[float, float] | None:
-    query = normalize_location(location_text)
+def _demo_address(query: str) -> tuple[float, float] | None:
+    """Exact demo-address match, else the longest demo name inside the query.
+
+    Callers rarely say only the name: "Khalsa School on Conrich Road" or
+    "King George School by the field" should still resolve.
+    """
     if query in DEMO_ADDRESSES:
         return DEMO_ADDRESSES[query]
+    for name in sorted(DEMO_ADDRESSES, key=len, reverse=True):
+        if re.search(rf"\b{re.escape(name)}\b", query):
+            return DEMO_ADDRESSES[name]
+    return None
+
+
+def geocode(conn: sqlite3.Connection, location_text: str) -> tuple[float, float] | None:
+    query = normalize_location(location_text)
+    demo = _demo_address(query)
+    if demo:
+        return demo
     coordinates = re.fullmatch(r"(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)", query)
     if coordinates:
         lat, lon = map(float, coordinates.groups())
