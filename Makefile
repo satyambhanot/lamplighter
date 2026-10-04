@@ -40,7 +40,8 @@ tunnel:
 voice:
 	. .venv/bin/activate && python -m voice.setup_agent
 
-# Text-only test call through ElevenLabs: make voice-test SCENARIO=report|status|hazard
+# Text-only test call through ElevenLabs:
+# make voice-test SCENARIO=report|status|hazard|other_city|emergency
 SCENARIO ?= report
 voice-test:
 	. .venv/bin/activate && python -m voice.test_call --scenario $(SCENARIO)

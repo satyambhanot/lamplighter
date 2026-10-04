@@ -78,7 +78,7 @@ make voice
 make voice-test SCENARIO=report
 ```
 
-`SCENARIO` is `report`, `status` or `hazard`. The output shows each spoken turn, each tool call and each tool result. ElevenLabs' simulate endpoint never calls webhooks, so each scenario returns a mocked result copied from a real API response (see `MOCK_RESULTS` in `test_call.py`). This checks how the agent talks and reads results. It does not touch the tunnel or the database; only a browser call does.
+`SCENARIO` is `report`, `status`, `hazard`, `other_city` or `emergency`. The last two must end without any tool call; the script prints PASS or FAIL. The output shows each spoken turn, each tool call and each tool result. ElevenLabs' simulate endpoint never calls webhooks, so each scenario returns a mocked result copied from a real API response (see `MOCK_RESULTS` in `test_call.py`). This checks how the agent talks and reads results. It does not touch the tunnel or the database; only a browser call does.
 
 **Browser call (the real end-to-end test):** open ElevenLabs, go to Agents, open "Lamplighter street light line", and use the test call button. Allow the microphone. Say, for example: "There's a street light out near King George School."
 

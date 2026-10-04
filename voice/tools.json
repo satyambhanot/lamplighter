@@ -24,7 +24,7 @@
             },
             "location_text": {
               "type": "string",
-              "description": "The location exactly as the caller confirmed it: a street address, an intersection such as 'Centre Street and 16 Avenue NE', or a named place such as 'City Hall' or 'King George School'."
+              "description": "The confirmed place only, without words like 'near', 'outside' or 'by': a street address, an intersection such as 'Centre Street and 16 Avenue NE', or a named place such as 'City Hall' or 'King George School'."
             },
             "description": {
               "type": "string",

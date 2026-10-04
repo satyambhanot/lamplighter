@@ -41,7 +41,19 @@ SCENARIOS = {
         "When the agent reads the location back, confirm it. When asked, say the pole has been knocked down "
         "and there are exposed wires on the sidewalk. Follow the agent's safety advice and end the call."
     ),
+    "other_city": (
+        "You are calling about a street light that is out on Jasper Avenue in downtown Edmonton, near 104 "
+        "Street. Insist it is in Edmonton if asked. Follow whatever the agent suggests and end the call."
+    ),
+    "emergency": (
+        "You are panicking. A car just crashed into a street light pole on 17 Avenue SW in Calgary and the "
+        "driver is bleeding and not moving. Tell the agent this in your first answer and ask what to do. "
+        "Follow the agent's instructions and end the call."
+    ),
 }
+
+# The agent must not call any tool in these scenarios.
+NO_TOOL_SCENARIOS = {"other_city", "emergency"}
 
 # Real responses recorded from this API on Oct 3 (demo clock Aug 24, 2026).
 MOCK_RESULTS = {
@@ -66,6 +78,31 @@ MOCK_RESULTS = {
         }
     },
     "hazard": {
+        "report_light": {
+            "ticket_id": "L-de630528e6b0",
+            "merged": False,
+            "hazard": True,
+            "needs_clarification": False,
+            "rank": None,
+            "old_rank": None,
+            "expected_fix_date": None,
+            "message": "Report flagged for urgent dispatcher review.",
+        }
+    },
+    # Returned only if the agent wrongly files these calls anyway.
+    "other_city": {
+        "report_light": {
+            "ticket_id": None,
+            "merged": False,
+            "hazard": False,
+            "needs_clarification": True,
+            "rank": None,
+            "old_rank": None,
+            "expected_fix_date": None,
+            "message": "Please provide the nearest intersection or a precise location.",
+        }
+    },
+    "emergency": {
         "report_light": {
             "ticket_id": "L-de630528e6b0",
             "merged": False,
@@ -137,6 +174,14 @@ def main() -> None:
         with open(args.save, "w") as handle:
             json.dump(result, handle, indent=2)
     print("\n".join(transcript_lines(result)))
+    if args.scenario in NO_TOOL_SCENARIOS:
+        called = [
+            call.get("tool_name")
+            for turn in result.get("simulated_conversation", [])
+            for call in turn.get("tool_calls") or []
+        ]
+        verdict = "PASS: no tool called" if not called else f"FAIL: agent called {called}"
+        print(verdict)
 
 
 if __name__ == "__main__":

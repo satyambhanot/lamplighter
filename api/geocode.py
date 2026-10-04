@@ -18,12 +18,25 @@ _lock = threading.Lock()
 _last_request = 0.0
 
 
+# Callers say "near City Hall" or "outside the school"; the place is what follows.
+_LEADING_PHRASES = re.compile(
+    r"^(?:(?:right |just )?(?:near|nearby|outside(?: of)?|in front of|across from|beside|next to|"
+    r"close to|by|at|on|behind|opposite)\s+)?(?:the\s+)?"
+)
+
+
+def normalize_location(location_text: str) -> str:
+    """Lowercase, collapse spaces and drop a leading "near", "outside the", etc."""
+    query = " ".join(location_text.casefold().split()).rstrip(".")
+    return _LEADING_PHRASES.sub("", query, count=1) or query
+
+
 def _in_city(lat: float, lon: float) -> bool:
     return 50.85 <= lat <= 51.25 and -114.35 <= lon <= -113.85
 
 
 def geocode(conn: sqlite3.Connection, location_text: str) -> tuple[float, float] | None:
-    query = " ".join(location_text.casefold().split())
+    query = normalize_location(location_text)
     if query in DEMO_ADDRESSES:
         return DEMO_ADDRESSES[query]
     coordinates = re.fullmatch(r"(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)", query)
