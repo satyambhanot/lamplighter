@@ -1,7 +1,9 @@
 """Run a text-only test call against the real ElevenLabs agent.
 
-ElevenLabs plays a simulated caller; the agent's tools call our API through
-the tunnel for real, so the light shows up on the dashboard.
+ElevenLabs plays a simulated caller against the real agent and prompt.
+The simulate endpoint never calls webhooks, so each scenario returns a
+mocked tool result copied from a real API response. This tests how the
+agent talks and reads results; only a browser call exercises the tunnel.
 
 Run with: python -m voice.test_call --scenario report   (or status, hazard)
 Needs make api, make tunnel and make voice first. Each run uses credits.
@@ -41,10 +43,53 @@ SCENARIOS = {
     ),
 }
 
+# Real responses recorded from this API on Oct 3 (demo clock Aug 24, 2026).
+MOCK_RESULTS = {
+    "report": {
+        "report_light": {
+            "ticket_id": "L-5b790e96b0b3",
+            "merged": False,
+            "hazard": False,
+            "needs_clarification": False,
+            "rank": 10,
+            "old_rank": None,
+            "expected_fix_date": "2026-08-31",
+            "message": "New report entered at priority #10.",
+        }
+    },
+    "status": {
+        "check_status": {
+            "ticket_id": "L-5b790e96b0b3",
+            "rank": 5,
+            "expected_fix_date": "2026-08-31",
+            "status": "open",
+        }
+    },
+    "hazard": {
+        "report_light": {
+            "ticket_id": "L-de630528e6b0",
+            "merged": False,
+            "hazard": True,
+            "needs_clarification": False,
+            "rank": None,
+            "old_rank": None,
+            "expected_fix_date": None,
+            "message": "Report flagged for urgent dispatcher review.",
+        }
+    },
+}
 
-def simulate(api_key: str, agent_id: str, caller_prompt: str) -> dict:
+
+def simulate(api_key: str, agent_id: str, scenario: str) -> dict:
+    mocks = {
+        tool: {"default_return_value": json.dumps(result), "default_is_error": False}
+        for tool, result in MOCK_RESULTS[scenario].items()
+    }
     body = {
-        "simulation_specification": {"simulated_user_config": {"prompt": {"prompt": caller_prompt}}},
+        "simulation_specification": {
+            "simulated_user_config": {"prompt": {"prompt": SCENARIOS[scenario]}},
+            "tool_mock_config": mocks,
+        },
         "new_turns_limit": MAX_TURNS,
     }
     response = requests.post(
@@ -87,7 +132,7 @@ def main() -> None:
         raise SystemExit("Missing ELEVENLABS_API_KEY or ELEVENLABS_AGENT_ID in .env. Run make voice first.")
 
     logger.info("Simulating a '%s' call; this takes up to a minute", args.scenario)
-    result = simulate(api_key, agent_id, SCENARIOS[args.scenario])
+    result = simulate(api_key, agent_id, args.scenario)
     if args.save:
         with open(args.save, "w") as handle:
             json.dump(result, handle, indent=2)

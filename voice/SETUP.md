@@ -78,9 +78,9 @@ make voice
 make voice-test SCENARIO=report
 ```
 
-`SCENARIO` is `report`, `status` or `hazard`. The output shows each spoken turn, each tool call and each API result. A `report` test adds a light, so it appears in the dashboard's Live dispatch view.
+`SCENARIO` is `report`, `status` or `hazard`. The output shows each spoken turn, each tool call and each tool result. ElevenLabs' simulate endpoint never calls webhooks, so each scenario returns a mocked result copied from a real API response (see `MOCK_RESULTS` in `test_call.py`). This checks how the agent talks and reads results. It does not touch the tunnel or the database; only a browser call does.
 
-**Browser call:** open ElevenLabs, go to Agents, open "Lamplighter street light line", and use the test call button. Allow the microphone. Say, for example: "There's a street light out near King George School."
+**Browser call (the real end-to-end test):** open ElevenLabs, go to Agents, open "Lamplighter street light line", and use the test call button. Allow the microphone. Say, for example: "There's a street light out near King George School."
 
 Places that resolve instantly are in `DEMO_ADDRESSES` in `config.py`. Any other Calgary address goes to Nominatim.
 
