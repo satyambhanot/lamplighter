@@ -1,6 +1,6 @@
 # Lamplighter Design Document
 
-Team NO Dark Night, IEEE YP Industry Hackathon, Case 6. Exported from the team's shared design document on October 3, 2026.
+Team NO Dark Night, IEEE YP Industry Hackathon, Case 6. Exported from the team's shared design document on October 4, 2026.
 
 ## 1. Introduction
 
@@ -27,11 +27,12 @@ Because of these findings, Lamplighter replays March to August week by week inst
 
 ## 2. System Overview
 
-**System description.** Lamplighter has three user-facing parts around one decision engine:
+**System description.** Lamplighter has four user-facing parts around one decision engine:
 
 - **Ranking engine:** replays 311 history week by week, plans each week's repairs, and counts dark nights for each policy.
 - **Voice line (ElevenLabs):** residents report a light or ask for its status. Each call merges duplicates, re-ranks the queue and returns an expected fix week.
 - **Dashboard:** a live map of open lights, a crew-size slider, a dark-nights scoreboard, an activity log and the dispatcher note.
+- **Pole sensors (simulated):** smart poles at real 311 locations report lamp current; a rule-based detector flags faults before residents call and sends them to the same queue as a voice report.
 
 **Design goals.**
 
@@ -60,7 +61,7 @@ Residents reach the system only through the ElevenLabs agent, and dispatchers on
 5. The agent tells the caller the light's rank and expected fix week.
 6. The dashboard's Live dispatch view polls the API every 5 seconds, so the map and activity log update while the call is still going.
 
-Two exits leave the normal path. A hazard (downed pole, exposed wires) skips the queue and goes to a human. An address that cannot be found returns needs\_clarification, and the agent asks for the nearest intersection.
+Two exits leave the normal path. A hazard (downed pole, exposed wires) skips the queue and goes to a human. An address that cannot be found returns needs\_clarification, and the agent asks for a street address or a well-known place nearby.
 
 ## 3. Detailed Backend Design
 
@@ -86,6 +87,7 @@ The backend has three components: the engine makes every decision, the API servi
 | live.what\_if(lights, layers, policy, budget\_pct, as\_of) → dict | Read-only plan for the dashboard slider, with the dispatcher note |
 | live.demo\_queue(as\_of) → DataFrame | Open lights at the demo date from the tuned replay; seeds the demo database |
 | live.load\_tuned\_weights(), live.load\_live\_layers() | Read results/weights.json and the school and transit layers once at API startup |
+| sensors.run\_simulation(), detect(), alarm\_reports() | Simulated smart poles at real 311 locations with synthetic lamp-current readings, or an uploaded readings file; a rule-based detector flags lamps out, flickering, dimming or on in daytime, and alarms are shaped as /report calls |
 | run\_all | Regenerates every chart and number in results/ with one command |
 
 The live API imports only engine/live.py, so the live demo and the results slide always run the same scoring code.
@@ -182,27 +184,30 @@ The search tries 200 random weight sets (seed 42, each weight drawn from 0 to 2)
 | --- | --- | --- |
 | POST /report | Takes {phone, location\_text, description}. Checks hazards, geocodes, merges within 150 m or creates a light, then re-ranks | {ticket\_id, merged, hazard, needs\_clarification, rank, old\_rank, expected\_fix\_date, message} |
 | GET /status?phone= | Finds the caller's light by hashed phone number | {ticket\_id, rank, expected\_fix\_date, status} |
-| GET /queue | Lists open lights in rank order | \[{ticket\_id, lat, lon, rank, score, reasons, expected\_fix\_date, comm\_name, call\_count}\] |
-| GET /plan?budget\_pct=&policy= | What-if plan for the dashboard slider (policy fifo, v1 or tuned), with the dispatcher note; changes nothing | {budget\_pct, policy, lights\_planned, minutes\_used, skipped\_count, note, queue} |
-| GET /events?since= | Activity log since a timestamp | \[{at, type, light\_id, message}\] |
-| GET /dispatch?budget\_pct=&policy= | Everything the dashboard shows, read in one transaction; the baseline is the same queue and policy at 100% capacity | {revision, as\_of, queue, plan, baseline, events, confirmed\_plan} |
+| GET /queue | Lists open lights in rank order; dispatcher key | \[{ticket\_id, lat, lon, rank, score, reasons, expected\_fix\_date, comm\_name, call\_count}\] |
+| GET /plan?budget\_pct=&policy= | What-if plan for the dashboard slider (policy fifo, v1 or tuned), with the dispatcher note; changes nothing; dispatcher key | {budget\_pct, policy, lights\_planned, minutes\_used, skipped\_count, note, queue} |
+| GET /events?since= | Activity log since a timestamp; dispatcher key | \[{at, type, light\_id, message}\] |
+| GET /dispatch?budget\_pct=&policy= | Everything the dashboard shows, read in one transaction; the baseline is the same queue and policy at 100% capacity; dispatcher key | {revision, as\_of, queue, plan, baseline, events, confirmed\_plan, hazards} |
 | GET /lights/{ticket\_id}/history | Reports and events for one light, never phone data; dispatcher key | {ticket\_id, history, complete} |
-| POST /plans/confirm | Takes {revision, policy, budget\_pct}. Locks the reviewed plan and its stop numbers; dispatcher key | {id, policy, budget\_pct, status, created\_at, remaining\_ids, completed\_count, visits} |
+| POST /plans/confirm | Takes {revision, policy, budget\_pct, candidate\_id}. Locks the reviewed plan and its stop numbers, and refuses if the proposed route changed since it was reviewed; dispatcher key | {id, policy, budget\_pct, status, created\_at, remaining\_ids, completed\_count, visits} |
+| POST /hazards/{ticket\_id}/handoff | Takes {revision, note}. Records who took over an urgent hazard and moves it to hazard\_referred; dispatcher key | {ticket\_id, status, revision} |
 | POST /fixed/{ticket\_id} | Takes {revision, plan\_id}. Marks a confirmed visit fixed; dispatcher key; rejects stale revisions | Updated light |
 | POST /demo/reset | Restores the seeded demo state; dispatcher key | OK |
 | GET /health | Liveness check | OK |
 
 **Logic.**
 
-- Hazards are checked twice: the agent's prompt asks about downed poles, and the API scans the description text. Safety never depends on one layer.
-- An address that cannot be geocoded returns needs\_clarification: true instead of an error, so the agent can ask for an intersection.
+- Hazards are checked twice: the agent's prompt asks about downed poles, and the API scans the description text. Safety never depends on one layer. The API check ignores a denial such as "no exposed wires or sparking" only within the same clause and only across hazard-list words, so a caller who says there is no hazard is not flagged, while "the pole is down" or "knocked down" always is.
+- An address that cannot be geocoded returns needs\_clarification: true instead of an error, so the agent can ask for a street address or a well-known place. Intersections are not supported, because Nominatim cannot resolve them.
 - The activity log is a feature, not debugging. Showing "merged, re-ranked, #12 to #4" live is the clearest proof of autonomous reasoning (30% of the rubric).
 - The reasons field lets both the dashboard and the voice agent explain every rank.
 - Every re-rank goes through engine/live.py. One adapter in service.py renames the database's lat/lon to the engine's latitude/longitude; the API never copies scoring logic.
-- Event types are new, merged, rerank, hazard, fixed, reset and plan\_confirmed, each with a readable message such as "Call merged, light moved from #12 to #4."
+- Event types are new, merged, rerank, hazard, fixed, reset, plan\_confirmed and hazard\_referred, each with a readable message such as "Call merged, light moved from #12 to #4."
 - The live clock is the demo date (Monday, August 24) for scoring, new reports and fix dates. Event timestamps use the real clock so the dashboard can poll with since=.
 - Dispatcher writes use immediate SQLite transactions and carry the revision they were based on, so a stale write is rejected and a retried write is safe. A new resident report moves a confirmed plan to needs\_review until the dispatcher confirms again.
 - Spoken locations are normalized before geocoding: a leading "near", "outside the" or similar is dropped, so "near King George School" matches the demo address list. Nominatim searches only inside a Calgary bounding box, so an out-of-city address returns needs\_clarification instead of a wrong light.
+- Urgent hazards stay out of the routine route and appear in their own dashboard panel until a dispatcher records who took them over (POST /hazards/{ticket\_id}/handoff, status hazard\_referred).
+- Sensor alarms use the same POST /report route as the voice agent, with the pole's location as coordinates and one fake caller number per pole, so repeated alarms from one pole merge.
 
 ### Component: Voice agent (voice/)
 
@@ -218,9 +223,10 @@ The search tries 200 random weight sets (seed 42, each weight drawn from 0 to 2)
 **Conversation rules.**
 
 - **Emergencies come first.** If anyone is hurt or in danger, or the caller describes any emergency (a crash, fire, crime, medical problem or gas smell), the agent tells them to hang up and call 911 right away and files nothing. This rule overrides every other rule.
-- **Calgary only.** A light in another city or town is not filed; the agent points the caller to that municipality's 311.
+- **Calgary only.** A light in another city or town is not filed; the agent points the caller to that municipality's 311. It knows nearby places that are not Calgary (Conrich, Chestermere, Airdrie, and Township or Range Roads in Rocky View County), so a call about Khalsa School in Conrich is redirected at once.
 - Always read the location back in the caller's own words, never adding a street or quadrant, and confirm it.
 - Always ask about downed poles or exposed wires before filing. Hazards are flagged for a dispatcher and never enter the routine queue; the caller is told to stay away and call 911 if anyone is in danger.
+- When a location is not found, the agent asks for a street address or a well-known place nearby, never an intersection, and suggests 311 after two failed tries.
 - Never state a rank, date or status the API did not return. If a tool fails, the agent says dispatch is unreachable and suggests 311.
 - Replies are two sentences at most, calls stay under two minutes, and dates are said as "the week of."
 - A duplicate report gets a data-driven answer, for example: "Your call was added to that report, and it moved up from #10 to #5."
@@ -238,7 +244,7 @@ One local SQLite file (stdlib sqlite3, WAL mode, no ORM). The API is the only wr
 
 | Table | Fields | Purpose |
 | --- | --- | --- |
-| lights | id (PK, first ticket's ID), lat, lon, comm\_name, is\_damage, first\_reported, call\_count, status (open, fixed or hazard), fixed\_at, score, rank, expected\_fix\_date, reasons | One row per physical light: its facts plus the engine's latest score, rank, fix date and reasons |
+| lights | id (PK, first ticket's ID), lat, lon, comm\_name, is\_damage, first\_reported, call\_count, status (open, fixed, hazard or hazard\_referred), fixed\_at, score, rank, expected\_fix\_date, reasons | One row per physical light: its facts plus the engine's latest score, rank, fix date and reasons |
 | calls | id (PK), light\_id (FK → lights.id), phone\_hash, channel (voice, fake or seed), location\_text, description, created\_at | Every report, including merged duplicates |
 | events | id (PK), at, type, light\_id (FK → lights.id), message | The live activity log shown on the dashboard |
 | geocode\_cache | query (PK), lat, lon, source | Cached address lookups so the demo never waits on a geocoder |
@@ -260,7 +266,7 @@ One local SQLite file (stdlib sqlite3, WAL mode, no ORM). The API is the only wr
 | --- | --- | --- |
 | ElevenLabs Agents | Speech, conversation, and calls to our webhook tools; agent and tools created by make voice | Recorded call plus scripts/fake\_call.py |
 | ngrok | Tunnel on a fixed free domain (NGROK\_DOMAIN) so ElevenLabs can reach the local API from the venue | Run fake\_call.py against localhost |
-| Nominatim (OpenStreetMap) | Turning spoken addresses into coordinates inside a Calgary bounding box, cached | Demo address list first, then ask for an intersection |
+| Nominatim (OpenStreetMap) | Turning spoken addresses into coordinates inside a Calgary bounding box, cached | Demo address list first, then ask for a street address or landmark |
 | Anthropic API | Dispatcher note | Template note |
 | City of Calgary open data | 311 lighting tickets, school locations and transit stops | Seed CSV, schools.csv and transit\_stops.csv committed in data/ |
 | Calgary Transit stops (open data portal) | Transit stop coordinates | Committed in data/transit\_stops.csv |
@@ -271,7 +277,7 @@ scripts/fetch\_open\_data.py downloads the school and transit layers, so anyone 
 
 ## 6. Security Considerations
 
-**Authentication.** There is no user login this weekend; the dashboard runs on the team laptop. Two shared keys protect the API: voice tool calls send X-Lamplighter-Voice-Secret, and dispatcher writes, report history and demo reset send X-Lamplighter-Dispatcher-Secret. The API rejects calls without the right key. make configure generates both keys and the phone-hash salt into the ignored .env without overwriting existing values. In production, dispatchers sign in through the City's single sign-on.
+**Authentication.** There is no user login this weekend; the dashboard runs on the team laptop. Two shared keys protect the API: voice tool calls and sensor alarms send X-Lamplighter-Voice-Secret, and every dashboard read and write, report history and demo reset send X-Lamplighter-Dispatcher-Secret. The API rejects calls without the right key. make configure generates both keys and the phone-hash salt into the ignored .env without overwriting existing values. In production, dispatchers sign in through the City's single sign-on.
 
 **Authorization.** Only the API writes to the database; the dashboard and scripts go through it. In production, dispatcher roles would come from single sign-on.
 
@@ -283,7 +289,7 @@ scripts/fetch\_open\_data.py downloads the school and transit layers, so anyone 
 - If a key is ever pushed, revoke it in the provider's dashboard at once; deleting the commit is not enough on a public repo.
 - The voice key reaches ElevenLabs only as a workspace secret, referenced by ID in the tool headers. Editor backup folders (.history/) are gitignored because they can hold copies of .env.
 
-**Caller safety.** The agent never files a hazard as a routine ticket. Downed poles and exposed wires go to a human or emergency line, and the API double-checks the description text.
+**Caller safety.** The agent never files a hazard as a routine ticket. Downed poles and exposed wires go to a human or emergency line, and the API double-checks the description text. Hazards stay in an urgent dashboard panel until a dispatcher records who took them over.
 
 ## 7. Frontend/UX Design
 
@@ -291,12 +297,14 @@ scripts/fetch\_open\_data.py downloads the school and transit layers, so anyone 
 
 **Frontend design (as built on main).**
 
-- **Sidebar:** workspace (Dispatch or Evaluation), data source (Historical preview, the default, or Live dispatch), dispatch policy (FIFO, version 1, tuned) and crew capacity (50–120%).
+- **Sidebar:** workspace (Dispatch, Evaluation or Sensors), data source (Historical preview, the default, or Live dispatch), dispatch policy (FIFO, version 1, tuned) and crew capacity (50–120%).
 - **Top row:** planned visits, crew-hours allocated and the waiting backlog for the chosen policy and capacity.
 - **Plan review:** the dispatcher note, then Review and Confirm (Live dispatch only). Confirmed stop numbers stay fixed as repairs are recorded.
 - **Middle:** a community filter, the map with numbered stops and school, transit and visit-order layers on the left, and the selected light's details and report history on the right.
 - **Bottom:** planned and waiting tables with CSV export, capacity impact against a 100% plan, and recent activity (Live dispatch).
 - **Evaluation workspace:** the FIFO, version 1 and tuned results table.
+- **Urgent hazards:** a red panel in Dispatch lists hazard reports kept out of the routine route; the dispatcher types who received each one and clicks Record hazard handoff.
+- **Sensors workspace:** a simulated fleet of smart poles at real 311 locations with synthetic lamp-current readings, or an uploaded readings file. A rule-based detector flags lamps that are out, flickering, dimming or on in daytime, and alarms can be sent to the live queue through POST /report.
 
 **Gaps against the agreed layout (open decision).** The wireframe below is the layout the team agreed. As built, the FIFO-vs-tuned headline cards sit in the Evaluation workspace, the activity log is a collapsed Recent activity panel showing four events, and the dashboard opens on Historical preview, so a live call only appears after switching to Live dispatch. Decide before the demo whether to bring the headline cards and the activity log back to the main view.
 
@@ -337,7 +345,7 @@ make api         # uvicorn api.main:app --port 8000
 make dash        # streamlit run dashboard/app.py
 make tunnel      # ngrok http 8000 on the fixed NGROK_DOMAIN
 make voice       # create or update the ElevenLabs agent and tools
-make voice-test  # simulated call: SCENARIO=report|status|hazard|other_city|emergency
+make voice-test  # simulated call: SCENARIO=report|status|hazard|other_city|emergency|conrich|no_hazard|not_found
 make test        # pytest -q
 make reset       # restore demo state (needs the dispatcher key)
 ```
@@ -348,10 +356,10 @@ make reset       # restore demo state (needs the dispatcher key)
 lamplighter/
 ├── config.py         all constants and assumptions
 ├── Makefile
-├── engine/           data, geo, features, score, plan, simulate, tune, note, run_all
+├── engine/           data, geo, features, score, plan, simulate, tune, note, sensors, run_all
 │   └── live.py       the only engine module the API calls
 ├── api/              main, service, db, schemas, geocode, seed
-├── dashboard/app.py
+├── dashboard/        app, data, maps, sensors
 ├── voice/            prompt, tool definitions, setup and test scripts, sample transcript
 ├── scripts/          fetch_open_data.py, fake_call.py
 ├── data/             seed CSV; raw/ is gitignored
@@ -362,12 +370,13 @@ lamplighter/
 
 ## 9. Testing Strategy
 
-**Unit testing (pytest).** 90 tests across the engine, API, geocoding, dashboard and voice setup; make test runs them in about 16 seconds. They include:
+**Unit testing (pytest).** 121 tests across the engine, API, hazard check, geocoding, sensors, dashboard and voice setup; make test runs them in about 16 seconds. They include:
 
 - The score formula returns the expected values, such as 5.25 for the damaged pole and 4.0 for the plain light in Section 3.
 - Two calls 100 m apart merge into one light.
 - The simulation counts dark nights correctly on a tiny hand-made case.
 - A new resident report re-ranks correctly next to seeded lights, and hazards never enter the queue.
+- The hazard check flags 17 real hazards, including "the light is not working the pole is down", and ignores 8 denials such as "no exposed wires or sparking".
 
 **Result evaluation.**
 
@@ -389,7 +398,7 @@ lamplighter/
 
 - scripts/fake\_call.py hits POST /report, and the light appears on the map with a re-rank in the activity log.
 - An ElevenLabs browser test call reaches the API through ngrok and hears back a rank and fix week. Passed on October 3 (voice/sample\_transcript.md).
-- make voice-test plays five simulated callers against the real agent: report, status, hazard, other city and emergency. ElevenLabs simulations mock tool results, so these check how the agent talks and reads results; the other-city and emergency calls must end with no report filed. All five pass. The tests found and fixed two problems: the agent invented a street when reading a location back, and "near King George School" failed to geocode.
+- make voice-test plays eight simulated callers against the real agent: report, status, hazard, other city, emergency, Conrich, no hazard and not found. ElevenLabs simulations mock tool results, so these check how the agent talks and reads results. The other-city, emergency and Conrich calls must end with no report filed, the no-hazard calls must not be flagged by the API's hazard check, and the not-found call must never ask for an intersection; all pass. The hazard call also runs five times in a row and must ask the safety question before filing. These tests and a real Sunday call found and fixed five problems: an invented street on read-back, "near King George School" failing to geocode, Conrich not recognised as outside Calgary, requests for intersections the geocoder cannot resolve, and a false hazard when a caller said "no exposed wires".
 - make reset restores the demo state before every rehearsal.
 - A fresh clone runs with make setup; a piece is only "done" when it does.
 
@@ -415,14 +424,15 @@ lamplighter/
 - [ ] Sat 21:00: feature freeze; record the backup demo video
 - [ ] Sun 10:30: submitted (hard deadline is noon)
 
-**Status, Saturday 20:45.** Engine, API, dashboard and the ElevenLabs voice agent are merged to main, and all 90 tests pass. A real browser call filed a report end to end, so the 13:00 thin slice is now complete. The dashboard's Historical preview was rebuilt from the current tuned weights, and all 45 saved scenarios match the live engine. Left before the 21:00 freeze: rehearse the demo and record the backup video.
+**Status, Sunday 11:20.** Everything is merged to main and all 121 tests pass: engine, API, dashboard (including the pole-sensor workspace and urgent hazard handoffs) and the ElevenLabs voice agent. A real call on Sunday morning about Khalsa School in Conrich exposed three problems, now fixed: Conrich was not recognised as outside Calgary, the agent kept asking for intersections the geocoder cannot resolve, and "no exposed wires" was flagged as a hazard. Left before the noon deadline: rehearse, record the backup video if it is not done, and submit.
 
 **Risk register.**
 
 | Risk | Fallback |
 | --- | --- |
 | Venue Wi-Fi or ngrok fails | Run fake\_call.py live and show the recorded call |
-| An address cannot be geocoded | Demo address list, then ask for an intersection |
+| An address cannot be geocoded | Demo address list, then ask for a street address or landmark |
+| A caller is just outside Calgary (Conrich, Chestermere, Airdrie) | The agent says the light is outside the City and points to that county or town; nothing is filed |
 | Tuned weights do not beat version 1 on the test window | Report it honestly; the gain over FIFO is still the story |
 | A judge asks how long lights really stay dark | State the assumption: a light stays dark from its first report until the crew fixes it, and "closed" is never read as fixed |
 | A judge calls the result circular | Show the strategy and scorecard are separate, and the result holds on unseen weeks at three crew sizes |
