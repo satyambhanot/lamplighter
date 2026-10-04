@@ -159,13 +159,28 @@ def render_map(view: DispatchView, community: str) -> None:
         width="stretch",
         height=520,
     )
-    markup(
-        '<div class="map-legend"><span><i class="legend-dot" style="background:#2563eb"></i>Numbered visit</span>'
-        '<span><i class="legend-dot" style="background:#6b809a"></i>Waiting</span>'
-        '<span><i class="legend-dot" style="background:#0d9488"></i>Selected</span>'
-        '<span><i class="legend-dot" style="background:#bd3d54"></i>Removed vs 100%</span></div>'
+    route_legend = (
+        '<span><i class="legend-route" aria-hidden="true">›</i>Proposed visit order</span>'
+        if flags["route"] and flags["planned"]
+        else ""
     )
-    st.caption("Lines show visit order; travel estimates use straight-line distances, not road directions.")
+    reference_legend = "".join(
+        f'<span><i class="legend-reference legend-{name}" aria-hidden="true"></i>{label}</span>'
+        for name, label in (("schools", "Schools"), ("transit", "Transit"))
+        if flags[name]
+    )
+    markup(
+        '<div class="map-legend" role="group" aria-label="Map legend">'
+        '<span><i class="legend-marker legend-planned" aria-hidden="true">1</i>Proposed visit</span>'
+        '<span><i class="legend-marker legend-waiting" aria-hidden="true"></i>Waiting</span>'
+        '<span><i class="legend-marker legend-selected" aria-hidden="true"></i>Selected</span>'
+        '<span><i class="legend-marker legend-removed" aria-hidden="true"></i>Removed vs 100%</span>'
+        '<span><i class="legend-marker legend-depot" aria-hidden="true"></i>Crew depot</span>'
+        f"{route_legend}{reference_legend}</div>"
+    )
+    st.caption(
+        "Chevrons show proposed visit order. Travel estimates use straight-line distances, not road directions."
+    )
 
 
 def render_history(ticket: str, view: DispatchView, historical: bool) -> None:
