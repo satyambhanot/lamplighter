@@ -28,13 +28,15 @@ NOTE_SYSTEM_PROMPT = (
 def _facts(plan: pd.DataFrame, skipped: pd.DataFrame, crew_cut_pct: float | None) -> dict:
     """Computed facts for the note — the only things the LLM may draw on."""
     facts: dict = {
-        "n_planned": int(len(plan)),
-        "n_skipped": int(len(skipped)),
+        "n_planned": len(plan),
+        "n_skipped": len(skipped),
         "damage_count": int(plan["is_damage"].sum()) if "is_damage" in plan and not plan.empty else 0,
         "school_count": int(plan["near_school"].sum()) if "near_school" in plan and not plan.empty else 0,
         "transit_count": int(plan["near_transit"].sum()) if "near_transit" in plan and not plan.empty else 0,
         "top_communities": (
-            plan["comm_name"].value_counts().head(3).to_dict() if "comm_name" in plan and not plan.empty else {}
+            plan["comm_name"].value_counts().head(3).to_dict()
+            if "comm_name" in plan and not plan.empty
+            else {}
         ),
         "crew_cut_pct": crew_cut_pct,
         "closest_miss_reason": None,
@@ -44,7 +46,9 @@ def _facts(plan: pd.DataFrame, skipped: pd.DataFrame, crew_cut_pct: float | None
     return facts
 
 
-def dispatcher_note(plan: pd.DataFrame, skipped: pd.DataFrame, crew_cut_pct: float | None = None) -> str:
+def dispatcher_note(
+    plan: pd.DataFrame, skipped: pd.DataFrame, crew_cut_pct: float | None = None, *, use_llm: bool = True
+) -> str:
     """Write a short paragraph: which lights were picked and the top
     reasons, what was skipped, and the crew-cut impact if any.
 
@@ -62,7 +66,7 @@ def dispatcher_note(plan: pd.DataFrame, skipped: pd.DataFrame, crew_cut_pct: flo
     facts = _facts(plan, skipped, crew_cut_pct)
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if api_key:
+    if api_key and use_llm:
         try:
             return _llm_note(facts, api_key)
         except Exception:
@@ -99,7 +103,7 @@ def _template_note(facts: dict) -> str:
     if facts["n_planned"] == 0:
         return "No lights are scheduled to be fixed this week."
 
-    parts = [f"This week the crew is fixing {_plural(facts['n_planned'], 'light')}."]
+    parts = [f"The proposed route includes {_plural(facts['n_planned'], 'light')}."]
 
     highlights = []
     if facts["damage_count"]:
@@ -116,11 +120,11 @@ def _template_note(facts: dict) -> str:
         parts.append(f"Most visits are in {communities}.")
 
     if facts["n_skipped"]:
-        parts.append(f"{_plural(facts['n_skipped'], 'light')} didn't fit this week's route and roll over to next week.")
+        parts.append(
+            f"{_plural(facts['n_skipped'], 'light')} didn't fit this week's route and remain in the backlog."
+        )
 
     if facts["crew_cut_pct"] is not None:
-        parts.append(
-            f"Crew capacity is reduced to {facts['crew_cut_pct']:.0%} this week, so fewer lights than usual are being fixed."
-        )
+        parts.append(f"Crew capacity is set to {facts['crew_cut_pct']:.0%} of the standard week.")
 
     return " ".join(parts)

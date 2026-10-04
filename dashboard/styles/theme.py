@@ -1,9 +1,15 @@
 """Lamplighter visual tokens."""
 
 COLORS = {
-    "primary": "#123B63", "accent": "#F3B61F", "success": "#13795B",
-    "warning": "#A45A08", "danger": "#B42332", "muted": "#5F6F82",
-    "surface": "#FFFFFF", "background": "#F3F6FA", "dark": "#111827",
+    "primary": "#123B63",
+    "accent": "#F3B61F",
+    "success": "#13795B",
+    "warning": "#A45A08",
+    "danger": "#B42332",
+    "muted": "#5F6F82",
+    "surface": "#FFFFFF",
+    "background": "#F3F6FA",
+    "dark": "#111827",
 }
 
 CSS = """

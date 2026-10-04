@@ -1,4 +1,4 @@
 policy,lights_fixed,total_dark_nights,risk_weighted_dark_nights,fixes_per_crew_hour,median_days_dark,still_dark_at_end
-FIFO,167,2262,3250.5,1.527,17.0,29
-v1,167,2205,2870.5,1.542,16.0,28
-tuned,166,2062,2528.2,1.555,13.0,27
+FIFO,167,2262,4018.5,1.452,18.0,29
+v1,167,2205,3357.2,1.47,18.0,28
+tuned,166,2158,3006.0,1.474,16.5,27

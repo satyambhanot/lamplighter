@@ -45,5 +45,7 @@ def query_radius(tree: BallTree, lat: float, lon: float, radius_m: float) -> np.
     nearest first.
     """
     point_rad = np.radians([[lat, lon]])
-    indices, _ = tree.query_radius(point_rad, r=radius_m / EARTH_RADIUS_M, sort_results=True, return_distance=True)
+    indices, _ = tree.query_radius(
+        point_rad, r=radius_m / EARTH_RADIUS_M, sort_results=True, return_distance=True
+    )
     return indices[0]

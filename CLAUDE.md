@@ -34,7 +34,7 @@ dashboard), and a pure engine package at the center. The engine does all
 the thinking and knows nothing about the web or the database. The API,
 dashboard, and command-line scripts are thin shells around it.
 
-Why: four people, 36 hours, one laptop on stage. Microservices, queues, or
+Why: five people, 36 hours, one laptop on stage. Microservices, queues, or
 cloud hosting would add failure points without adding judging points.
 
 ### Decision log
@@ -45,7 +45,7 @@ cloud hosting would add failure points without adding judging points.
 | Engine | pandas, numpy, scikit-learn `BallTree` (haversine) | Fast radius searches for duplicates, schools, transit |
 | API | FastAPI with Pydantic schemas | Typed contracts, auto docs at `/docs` |
 | Database | SQLite via stdlib `sqlite3`, WAL mode, no ORM | Zero setup; the API is the only writer |
-| Dashboard | Streamlit, pydeck map, `st.fragment(run_every=3)` for live refresh | Fastest path to a live map with no extra packages |
+| Dashboard | Streamlit, pydeck map, `st.fragment(run_every=5)` for live refresh | Fastest path to a live map with no extra packages |
 | Charts | matplotlib PNGs in `results/` | Reproducible and easy to put in slides |
 | Tuning | Random search, 200 trials, seed 42 | Simple, explainable, deterministic. Optuna is a stretch goal |
 | Voice | ElevenLabs agent with two webhook tools | ElevenLabs owns speech; we own logic |
@@ -71,6 +71,7 @@ lamplighter/
 │   ├── simulate.py    weekly replay, metrics
 │   ├── tune.py        random search
 │   ├── note.py        dispatcher note
+│   ├── live.py        the only engine entry point the API calls
 │   └── run_all.py     regenerates results/
 ├── api/
 │   ├── main.py        routes only
@@ -82,7 +83,7 @@ lamplighter/
 ├── dashboard/app.py
 ├── voice/             prompt, tools, setup, transcript
 ├── scripts/           fetch_open_data.py, fake_call.py
-├── data/              seed CSV; raw/ is gitignored
+├── data/              seed CSV, schools.csv, transit_stops.csv; raw/ is gitignored
 ├── results/
 ├── tests/
 └── docs/              DESIGN.md, DEMO_SCRIPT.md
@@ -106,8 +107,11 @@ budget.
 **Metrics:** risk-weighted dark nights (main), total dark nights, fixes
 per crew-hour, median days dark, and lights still dark at the end.
 
-**Policies:** FIFO, version 1 (hand-set weights), and tuned. Age in the
-score is measured in weeks so all weights sit on a similar scale.
+**Policies:** FIFO, version 1 (hand-set weights, `DEFAULT_POLICY_WEIGHTS`
+in `config.py`), and tuned. Damage-first is a stretch fourth policy. Age
+in the score is measured in weeks so all weights sit on a similar scale.
+Tuning draws each policy weight uniformly from 0 to 2 (`WEIGHT_MAX` in
+`engine/tune.py`).
 
 | Setting | Value |
 |---|---|
@@ -145,15 +149,30 @@ calls for. Tested budgets up to 1350 minutes barely move throughput
 
 ```sql
 lights(id PK, lat, lon, comm_name, is_damage, first_reported,
-       call_count, status, fixed_at, near_school, near_transit,
+       call_count, status, fixed_at,
        score, rank, expected_fix_date, reasons)
 calls(id PK, light_id, phone_hash, channel, location_text,
       description, created_at)
 events(id PK, at, type, light_id, message)
 geocode_cache(query PK, lat, lon, source)
+dispatch_state(id PK = 1, revision, seeded)
+plans(id PK, policy, budget_pct, created_at, status, snapshot)
+plan_visits(plan_id, light_id, position, status)   PK(plan_id, light_id)
 ```
 
+The database stores facts and decisions; the engine owns the features.
+`lights` holds facts about each light (location, type, dates, call count,
+status) and the engine's outputs (score, rank, expected fix date,
+reasons). It never stores derived features such as `near_school`,
+`near_transit`, `age_days`, or `neighbours_dark`: `build_features()`
+recomputes them on every re-rank. A new feature built from existing
+facts plus a layer needs no schema change; a new raw input does.
+
 `status` is open, fixed, or hazard. `channel` is voice, fake, or seed.
+`dispatch_state.revision` goes up on every write, so stale dashboard
+writes are rejected. A plan's `status` is confirmed, needs_review (a new
+report arrived after confirmation), superseded, or completed;
+`plan_visits` keeps each confirmed stop number and whether it was fixed.
 Phone numbers are stored only as salted hashes, with the salt in `.env`.
 
 ### API contract
@@ -163,18 +182,48 @@ POST /report   {phone, location_text, description}
             -> {ticket_id, merged, hazard, needs_clarification,
                 rank, old_rank, expected_fix_date, message}
 GET  /status?phone=      -> {ticket_id, rank, expected_fix_date, status}
-GET  /queue              -> [{ticket_id, lat, lon, rank, score, reasons}]
-GET  /plan?budget_pct=&policy=  -> what-if plan for the dashboard slider
+GET  /queue              -> [{ticket_id, lat, lon, rank, score, reasons,
+                              expected_fix_date, comm_name, call_count}]
+GET  /plan?budget_pct=&policy=
+                         -> {budget_pct, policy, lights_planned,
+                             minutes_used, skipped_count, note,
+                             queue: [QueueItem]}
 GET  /events?since=      -> [{at, type, light_id, message}]
-POST /fixed/{ticket_id}
+GET  /dispatch?budget_pct=&policy=
+                         -> {revision, as_of, queue, plan, baseline,
+                             events, confirmed_plan}
+GET  /lights/{ticket_id}/history -> {ticket_id, history, complete}
+POST /plans/confirm {revision, policy, budget_pct}
+                         -> {id, policy, budget_pct, status, created_at,
+                             remaining_ids, completed_count, visits}
+POST /fixed/{ticket_id} {revision, plan_id}
 POST /demo/reset
 GET  /health
 ```
 
 If an address can't be found, `/report` returns `needs_clarification:
 true` instead of an error, so the agent can ask for the nearest
-intersection. Voice tool calls must send a shared secret header
-(`X-Lamplighter-Voice-Secret`); the API rejects calls without it.
+intersection. Voice tool calls (`/report`, `/status`) must send a shared
+secret header (`X-Lamplighter-Voice-Secret`); the API rejects calls
+without it.
+
+The dashboard reads `/dispatch` as one SQLite read transaction. Its baseline
+uses the same queue and policy at 100% capacity. Dispatcher writes and report
+history require `X-Lamplighter-Dispatcher-Secret`; `make configure` generates
+local access keys in the ignored `.env`. Confirmation and repair writes use
+immediate transactions and reject stale revisions. Successful retries are
+idempotent. Confirmed stop numbers persist as repairs complete, and new
+reports require a renewed plan review. Startup does not reseed completed work.
+
+`/plan` is read-only: a what-if re-plan of the current queue for the
+dashboard slider, including the dispatcher note. `policy` is fifo, v1,
+or tuned. Event `type` is new, merged, rerank, hazard, fixed, reset, or plan_confirmed,
+and `message` is human-readable, like "Call merged, light moved from #12
+to #4."
+
+The live demo clock is `DEMO_DATE`: it is "today" for scoring,
+`first_reported` on new calls, and fix dates. Event `at` timestamps use
+the real wall clock so `/events?since=` works.
 
 ### Voice agent decisions
 
@@ -246,7 +295,31 @@ engine/
   plan_week(queue, order, budget_min) -> list[light_id]
   simulate(tickets, policy, budget_min) -> RunResult
   project_fix_dates(queue, weights, budget_min) -> {light_id: date}
+
+engine/live.py  (the only module the API imports from engine/)
+  load_tuned_weights() -> dict
+      results/weights.json, else config.DEFAULT_POLICY_WEIGHTS
+  load_live_layers() -> dict
+      school and transit layers, loaded once at API startup
+  rerank(lights, layers, weights, budget_min, as_of) -> DataFrame
+      in:  index = light id; columns latitude, longitude, comm_name,
+           is_damage (bool), first_reported (Timestamp), call_count (int)
+      out: same index, sorted by rank, plus near_school, near_transit,
+           age_days, neighbours_dark, score, rank (1 = fixed next),
+           reasons, expected_fix_date ("YYYY-MM-DD", or None if more
+           than 12 weeks out)
+  what_if(lights, layers, policy, budget_pct, as_of) -> dict
+      policy in {fifo, v1, tuned}; returns {planned: DataFrame (rerank
+      columns, visit order), skipped: DataFrame, minutes_used: float,
+      note: str}
+  demo_queue(as_of) -> DataFrame
+      open lights at as_of from the tuned-policy replay, same columns
+      as rerank's input
 ```
+
+The database uses `lat`/`lon` and the engine uses `latitude`/`longitude`.
+One adapter in `api/service.py` renames them; the engine never sees
+`lat`/`lon`, and the API never copies scoring logic.
 
 The `reasons` field (like "damage ticket, near a school, 3 calls") lets
 the dashboard and the voice agent explain every rank.
@@ -271,18 +344,32 @@ every later hour just makes it better.
 
 ```text
 make setup     create venv, install requirements
+make configure generate local access keys in the ignored .env
 make results   python -m engine.run_all
+make preview   rebuild the dashboard's saved historical scenarios
 make api       uvicorn api.main:app --port 8000
 make dash      streamlit run dashboard/app.py
 make tunnel    ngrok http 8000
 make test      pytest -q
-make reset     restore demo state
+make reset     restore demo state (needs the dispatcher key)
 ```
+
+**Roles (five people, one owner per file):**
+
+| Role | Owns |
+|---|---|
+| Engine lead | `engine/` (including `live.py`), `results/`, non-raw `data/`, engine and tuning tests, `ANTHROPIC_MODEL` in `config.py` |
+| Backend lead | `api/` except `geocode.py`, API tests |
+| Voice lead | `voice/`, `api/geocode.py`, `scripts/fake_call.py`, `DEMO_ADDRESSES` in `config.py` |
+| Dashboard lead | `dashboard/` |
+| Pitch lead | `docs/` (design doc, demo script, architecture diagram, slides), `README.md` |
+
+Need a change in a file you don't own? Ask its owner.
 
 **Rules:**
 
-- `main` must always run. Each person owns one folder and works on a
-  branch named after it.
+- `main` must always run. Each person works on a branch named after
+  themselves.
 - Merge at least every three hours with small pull requests and a quick
   review from one teammate.
 - A piece is done when it runs from a fresh clone with `make`, has a test

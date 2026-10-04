@@ -11,13 +11,21 @@ def render_sidebar(scenario_date: str) -> tuple[str, int, bool, bool]:
         st.caption("Street lighting dispatch")
         labels = {"FIFO": "FIFO · oldest first", "v1": "Version 1 · hand-set", "tuned": "Tuned · recommended"}
         policy = st.radio(
-            "Prioritization policy", list(labels), index=2,
-            format_func=labels.__getitem__, key="policy_choice",
+            "Prioritization policy",
+            list(labels),
+            index=2,
+            format_func=labels.__getitem__,
+            key="policy_choice",
             help="Choose how reported lights are ranked for repair.",
         )
         budget = st.slider(
-            "Weekly crew budget", min_value=70, max_value=120, step=5, value=100,
-            format="%d%%", key="budget_choice",
+            "Weekly crew budget",
+            min_value=70,
+            max_value=120,
+            step=5,
+            value=100,
+            format="%d%%",
+            key="budget_choice",
             help="Set crew capacity relative to a normal week.",
         )
         apply = st.button("Apply plan", type="primary", use_container_width=True)
