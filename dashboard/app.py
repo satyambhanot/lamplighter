@@ -37,7 +37,11 @@ load_dotenv(ROOT_DIR / ".env")
 API_BASE_URL = os.environ.get("LAMPLIGHTER_API_URL", "http://localhost:8000")
 DISPATCH_TOKEN = os.environ.get("DISPATCH_SHARED_SECRET", "")
 VOICE_TOKEN = os.environ.get("VOICE_SHARED_SECRET", "")
-st.set_page_config(page_title="Lamplighter · Dispatch", page_icon="◉", layout="wide")
+st.set_page_config(
+    page_title="Lamplighter · Dispatch",
+    page_icon=str(Path(__file__).with_name("favicon.svg")),
+    layout="wide",
+)
 st.markdown(f"<style>{Path(__file__).with_name('styles.css').read_text()}</style>", unsafe_allow_html=True)
 
 
