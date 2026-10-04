@@ -29,9 +29,9 @@ Before anything else:
 Current state (Sat Oct 3, evening): engine/, api/ and dashboard/ are built
 and merged to main (77 tests pass). results/ has real test-window numbers:
 FIFO 4018.5 -> v1 3357.2 -> tuned 3006.0 risk-weighted dark nights (-25.2%).
-scripts/fake_call.py works against the live API. Still open: voice/ (the
-ElevenLabs agent: prompt, tools.json, SETUP.md, transcript) and the pitch
-material in docs/. Read the code before redoing anything in the role tasks
+scripts/fake_call.py works against the live API. The ElevenLabs voice
+agent in voice/ also works end to end (see voice/SETUP.md). Still open: the
+pitch material in docs/. Read the code before redoing anything in the role tasks
 below; many Engine and Backend tasks are already done.
 
 AGREED CONTRACTS (also in CLAUDE.md; code against these and do not change

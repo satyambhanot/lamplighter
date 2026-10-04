@@ -4,9 +4,11 @@ Lamplighter decides which reported street lights a City of Calgary crew should f
 
 Built for the IEEE YP Industry Hackathon (Calgary, Oct 2 to 4, 2026), Case 6: Street-Light Outage Dispatch. Architecture, decisions, and team rules live in [CLAUDE.md](CLAUDE.md), the source of truth.
 
-**Status (Oct 3):** the engine, API, and dashboard work end to end. The ElevenLabs voice agent is not configured yet: the files in `voice/` are placeholders. `scripts/fake_call.py` stands in for a voice call.
+**Status (Oct 3):** the engine, API, dashboard, and ElevenLabs voice agent work end to end. A real browser call filed a report that appeared in Live dispatch; see [voice/sample_transcript.md](voice/sample_transcript.md). The full design is in [docs/DESIGN.md](docs/DESIGN.md).
 
 ![Live dispatch dashboard](docs/dashboard-live.png)
+
+![Architecture: one laptop, three outside services](docs/architecture.png)
 
 ## Project structure
 
@@ -57,13 +59,21 @@ lamplighter/
 │   └── raw/                  full 311 export goes here (gitignored, optional)
 ├── results/                  saved outputs of make results
 ├── tests/                    pytest suite for engine, API, and dashboard
-├── voice/                    ElevenLabs prompt, tools, setup, transcript (placeholders)
+├── voice/                    ElevenLabs voice agent
+│   ├── system_prompt.md      agent instructions (911 first, Calgary only, read-back, hazards)
+│   ├── tools.json            report_light and check_status webhook tools
+│   ├── setup_agent.py        creates or updates the agent and tools (make voice)
+│   ├── test_call.py          simulated test calls (make voice-test)
+│   ├── SETUP.md              voice setup steps
+│   └── sample_transcript.md  a real browser test call
 └── docs/
     ├── DEMO_SCRIPT.md        step-by-step demo
     ├── CODE_REVIEW.md        engineering review and known modelling limits
     ├── REFACTOR_REVIEW.md    second review with prioritized findings
     ├── AGENT_PROMPTS.md      per-role prompts for the team's coding agents
-    ├── DESIGN.md             placeholder for the exported design document
+    ├── DESIGN.md             design document, exported from the team's shared doc
+    ├── architecture.png      system context diagram
+    ├── dashboard-wireframe.png  the dashboard layout the team agreed
     └── dashboard-*.png       dashboard screenshots
 ```
 
@@ -99,8 +109,10 @@ make configure
 | `PHONE_HASH_SALT` | `make configure` | hashing caller phone numbers; `/report` fails without it |
 | `ANTHROPIC_API_KEY` | you, optional | LLM dispatcher note; without it a template note is used |
 | `LAMPLIGHTER_API_URL` | you, optional | API address for the dashboard and scripts (default `http://localhost:8000`) |
-| `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID` | you | voice agent (not wired up yet) |
-| `NGROK_AUTHTOKEN` | you | ngrok tunnel |
+| `ELEVENLABS_API_KEY` | you | `make voice` and `make voice-test` (key with ElevenAgents access) |
+| `NGROK_DOMAIN` | you | your free fixed ngrok domain, host only; used by `make tunnel` and `make voice` |
+| `ELEVENLABS_AGENT_ID` and the `ELEVENLABS_*_ID` values | `make voice` | lets later runs update the same agent, tools, and secret |
+| `NGROK_AUTHTOKEN` | you | listed for reference; add it with `ngrok config add-authtoken` |
 
 ## Makefile guide
 
@@ -114,13 +126,15 @@ make configure
 | `preview` | Rebuilds `dashboard/preview.json` (45 saved scenarios) from the current weights | `make preview` |
 | `api` | Starts the API on port 8000 with auto-reload | `make api` |
 | `dash` | Starts the Streamlit dashboard | `make dash` |
-| `tunnel` | Opens an ngrok tunnel to port 8000 for the voice agent | `make tunnel` |
+| `tunnel` | Opens an ngrok tunnel to port 8000 on `NGROK_DOMAIN` (a random URL if unset) | `make tunnel` |
+| `voice` | Creates or updates the ElevenLabs agent, tools, and secret; checks the tunnel first | `make voice` |
+| `voice-test` | Runs one simulated caller against the agent; `SCENARIO` is `report`, `status`, `hazard`, `other_city`, or `emergency` | `make voice-test SCENARIO=hazard` |
 | `reset` | Clears simulated repairs and confirmed plans and restores the demo queue | `make reset` |
 
 - **Default target:** `make` with no target runs `setup`.
-- **Override:** `PYTHON` picks the interpreter when uv is not installed, for example `make setup PYTHON=/usr/local/bin/python3.11`.
-- **Order:** `setup`, then `configure`, then `test`. Run `api` before `dash` (for Live dispatch), `reset`, `tunnel`, or `scripts/fake_call.py`. Run `preview` after `results`, because the saved preview uses `results/weights.json`.
-- **Dependencies:** every target except `setup` and `tunnel` needs `.venv`. `reset` and `fake_call.py` need `configure` and a running API.
+- **Overrides:** `PYTHON` picks the interpreter when uv is not installed, for example `make setup PYTHON=/usr/local/bin/python3.11`. `SCENARIO` picks the `voice-test` caller (default `report`).
+- **Order:** `setup`, then `configure`, then `test`. Run `api` before `dash` (for Live dispatch), `reset`, `tunnel`, or `scripts/fake_call.py`. Run `preview` after `results`, because the saved preview uses `results/weights.json`. For voice: `api`, then `tunnel`, then `voice`.
+- **Dependencies:** every target except `setup` and `tunnel` needs `.venv`. `reset` and `fake_call.py` need `configure` and a running API. `voice` needs `api` and `tunnel` running.
 
 ## How to run
 
@@ -166,11 +180,12 @@ The demo address list in `config.py` resolves instantly. Other addresses go to N
 | `make results` | Regenerates the results below |
 | `make preview` | Rebuilds the Historical preview from the current weights |
 | `make reset` | Restores the demo queue (API must be running) |
-| `make tunnel` | Exposes the API to ElevenLabs |
+| `make tunnel` then `make voice` | Exposes the API on your fixed domain and points the ElevenLabs agent at it |
+| `make voice-test SCENARIO=emergency` | Simulated caller; `other_city` and `emergency` print PASS when no report is filed |
 | `.venv/bin/python -m scripts.fetch_open_data` | Re-downloads `data/schools.csv` and `data/transit_stops.csv` |
 | `.venv/bin/python -m scripts.prepare_seed_data` | Rebuilds `data/street_lights_311.csv` from the raw export in `data/raw/` |
 
-The demo walkthrough is in [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
+For a real voice call, open ElevenLabs, go to Agents, open "Lamplighter street light line", and start a test call. Full voice setup is in [voice/SETUP.md](voice/SETUP.md). The demo walkthrough is in [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
 
 ## Results
 
@@ -261,6 +276,8 @@ All settings live in `config.py`.
 | Live dispatch shows "Dispatch data is unavailable" | Start the API, or switch back to Historical preview |
 | Map has no street tiles | Tiles load from CARTO and need internet; the tables and controls work offline |
 | Historical preview disagrees with `results/` | Run `make preview` after `make results` |
+| `make voice` cannot reach `/health` | Start `make api` and `make tunnel` first; see [voice/SETUP.md](voice/SETUP.md) |
+| ngrok says the domain is already in use | Another `make tunnel` is running; stop it or use that one |
 | Port 8000 is in use | Stop the other process, or run `.venv/bin/uvicorn api.main:app --port 8001` and set `LAMPLIGHTER_API_URL=http://localhost:8001` |
 
 ## Team, license, and acknowledgements
