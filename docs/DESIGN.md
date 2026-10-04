@@ -40,7 +40,7 @@ Because of these findings, Lamplighter replays March to August week by week inst
 - **Honest results:** weights are tuned on March to June and reported only on July and August.
 - **Explainability:** every rank carries its reasons, for example "damage ticket, near a school, 3 calls."
 - **One source of truth:** the offline replay, the live API and the dashboard all call the same score() function, so the demo and the results slide never disagree.
-- **Parallel work:** five people build against fixed contracts, one owner per file.
+- **Parallel work:** five people build against fixed contracts written down in CLAUDE.md.
 
 **Architecture summary.** A modular monolith: one Python repo, two running processes (API and dashboard), and a pure engine package at the centre. The engine knows nothing about the web or the database; the API, dashboard and scripts are thin shells around it. Five people, 36 hours and one laptop on stage do not justify microservices, queues or cloud hosting.
 
@@ -365,7 +365,7 @@ lamplighter/
 ├── data/             seed CSV; raw/ is gitignored
 ├── results/          charts, tables, weights.json
 ├── tests/
-└── docs/             DESIGN.md, DEMO_SCRIPT.md, AGENT_PROMPTS.md
+└── docs/             DESIGN.md, DEMO_SCRIPT.md, diagrams, screenshots
 ```
 
 ## 9. Testing Strategy
@@ -404,15 +404,7 @@ lamplighter/
 
 ## 10. Delivery Plan and Risks
 
-**Roles.** Five people, one owner per file; each works on a branch named after themselves. The prompt each person gives their coding agent is in docs/AGENT\_PROMPTS.md.
-
-| Role | Owns | Files |
-| --- | --- | --- |
-| Engine lead | Live engine entry point, fix dates, demo snapshot, results, data layers | engine/, results/, data/ |
-| Backend lead | API, database, re-rank on every call, demo seed | api/ (except geocode.py) |
-| Voice lead | ElevenLabs agent, geocoding, demo addresses, fake call script | voice/, api/geocode.py, scripts/fake\_call.py |
-| Dashboard lead | Map, slider, scoreboard, activity log, dispatcher note panel | dashboard/ |
-| Pitch lead | Slides, architecture diagram, demo script, design doc, README, demo video | docs/, README.md |
+**Team.** Satyam Bhanot, Jasdeep Singh, Navjot, Nikita Williams and Gautam Patel (team NO Dark Night). There are no fixed roles: everyone works across the whole repo, and every change reaches main through a small pull request or a direct merge after the tests pass.
 
 **Working rules.** main must always run. Merge at least every three hours with small pull requests and one teammate's review. Run git pull origin main before each work session.
 
@@ -436,7 +428,7 @@ lamplighter/
 | Tuned weights do not beat version 1 on the test window | Report it honestly; the gain over FIFO is still the story |
 | A judge asks how long lights really stay dark | State the assumption: a light stays dark from its first report until the crew fixes it, and "closed" is never read as fixed |
 | A judge calls the result circular | Show the strategy and scorecard are separate, and the result holds on unseen weeks at three crew sizes |
-| Merge conflicts | Folder ownership and small, frequent merges |
+| Merge conflicts | Small, frequent merges with the full test suite run first |
 | LLM call fails | Template note fills in automatically |
 | Voice not working by Saturday evening | Demo it from the backup recording; keep the live demo on the dashboard |
 

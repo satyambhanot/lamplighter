@@ -4,9 +4,9 @@ A 6-minute live demo for the judges, plus a 3-minute short version, setup, fallb
 
 Judging weights to keep in mind: 30% autonomous reasoning, 20% real problem, 20% working software and architecture, 15% commercialization, 15% pitch.
 
-## Roles
+## Who does what on stage
 
-| Role | Does |
+| Person | Does |
 |---|---|
 | **Presenter** | Talks the whole time; owns the slides and the story |
 | **Driver** | Clicks the dashboard on the projector |

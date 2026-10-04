@@ -71,6 +71,7 @@ lamplighter/
 │   ├── simulate.py    weekly replay, metrics
 │   ├── tune.py        random search
 │   ├── note.py        dispatcher note
+│   ├── sensors.py     simulated pole sensors and fault detector
 │   ├── live.py        the only engine entry point the API calls
 │   └── run_all.py     regenerates results/
 ├── api/
@@ -80,13 +81,13 @@ lamplighter/
 │   ├── schemas.py     Pydantic models
 │   ├── geocode.py
 │   └── seed.py        builds demo state
-├── dashboard/app.py
-├── voice/             prompt, tools, setup, transcript
+├── dashboard/         app.py (Dispatch, Evaluation, Sensors), data, maps, sensors
+├── voice/             prompt, tools, setup_agent.py, test_call.py, transcript
 ├── scripts/           fetch_open_data.py, fake_call.py
 ├── data/              seed CSV, schools.csv, transit_stops.csv; raw/ is gitignored
 ├── results/
 ├── tests/
-└── docs/              DESIGN.md, DEMO_SCRIPT.md
+└── docs/              DESIGN.md, DEMO_SCRIPT.md, diagrams, reviews
 ```
 
 ### Engine decisions
@@ -168,7 +169,7 @@ reasons). It never stores derived features such as `near_school`,
 recomputes them on every re-rank. A new feature built from existing
 facts plus a layer needs no schema change; a new raw input does.
 
-`status` is open, fixed, or hazard. `channel` is voice, fake, or seed.
+`status` is open, fixed, hazard, or hazard_referred (a dispatcher recorded who took the hazard over). `channel` is voice, fake, or seed.
 `dispatch_state.revision` goes up on every write, so stale dashboard
 writes are rejected. A plan's `status` is confirmed, needs_review (a new
 report arrived after confirmation), superseded, or completed;
@@ -191,12 +192,13 @@ GET  /plan?budget_pct=&policy=
 GET  /events?since=      -> [{at, type, light_id, message}]
 GET  /dispatch?budget_pct=&policy=
                          -> {revision, as_of, queue, plan, baseline,
-                             events, confirmed_plan}
+                             events, confirmed_plan, hazards}
 GET  /lights/{ticket_id}/history -> {ticket_id, history, complete}
-POST /plans/confirm {revision, policy, budget_pct}
+POST /plans/confirm {revision, policy, budget_pct, candidate_id}
                          -> {id, policy, budget_pct, status, created_at,
                              remaining_ids, completed_count, visits}
 POST /fixed/{ticket_id} {revision, plan_id}
+POST /hazards/{ticket_id}/handoff {revision, note}
 POST /demo/reset
 GET  /health
 ```
@@ -208,8 +210,8 @@ secret header (`X-Lamplighter-Voice-Secret`); the API rejects calls
 without it.
 
 The dashboard reads `/dispatch` as one SQLite read transaction. Its baseline
-uses the same queue and policy at 100% capacity. Dispatcher writes and report
-history require `X-Lamplighter-Dispatcher-Secret`; `make configure` generates
+uses the same queue and policy at 100% capacity. Every dashboard read and write, report
+history and hazard handoffs require `X-Lamplighter-Dispatcher-Secret`; `make configure` generates
 local access keys in the ignored `.env`. Confirmation and repair writes use
 immediate transactions and reject stale revisions. Successful retries are
 idempotent. Confirmed stop numbers persist as repairs complete, and new
@@ -217,7 +219,8 @@ reports require a renewed plan review. Startup does not reseed completed work.
 
 `/plan` is read-only: a what-if re-plan of the current queue for the
 dashboard slider, including the dispatcher note. `policy` is fifo, v1,
-or tuned. Event `type` is new, merged, rerank, hazard, fixed, reset, or plan_confirmed,
+or tuned. Event `type` is new, merged, rerank, hazard, fixed, reset, plan_confirmed,
+or hazard_referred,
 and `message` is human-readable, like "Call merged, light moved from #12
 to #4."
 
@@ -234,16 +237,28 @@ the real wall clock so `/events?since=` works.
   and dates are said as "the week of."
 - The agent always reads the address back and always asks about downed
   poles or exposed wires before filing.
+- Emergencies come first: anyone hurt or in danger is told to hang up and
+  call 911, and nothing is filed.
+- Calgary only: places outside the city (Conrich, Chestermere, Airdrie,
+  Township and Range Roads) are pointed to their own county or town.
+- The caller is never asked for a phone number (the tools send a fixed
+  demo number) and never asked for an intersection (Nominatim cannot
+  resolve intersections); the agent asks for a street address or landmark.
+- The API's hazard check ignores denials such as "no exposed wires" but
+  always flags "the pole is down" or "exposed wires on the sidewalk".
 
 ### Dashboard layout
 
-- **Top row:** three cards showing FIFO vs tuned risk-weighted dark
-  nights, percent improvement, and fixes per crew-hour.
-- **Middle:** the map on the left (top 10 lights highlighted), the live
-  activity log on the right.
-- **Bottom:** this week's list and the dispatcher note.
-- **Sidebar:** policy picker and crew budget slider, both calling
-  `/plan`.
+- **Sidebar:** workspace (Dispatch, Evaluation, Sensors), data source
+  (Historical preview or Live dispatch), policy picker and crew capacity.
+- **Dispatch:** planned visits, crew-hours and backlog; plan review and
+  confirmation; urgent hazard handoffs; the map with numbered stops; the
+  selected light's details; planned and waiting tables; capacity impact;
+  recent activity.
+- **Evaluation:** the FIFO vs version 1 vs tuned results table.
+- **Sensors:** simulated smart poles (synthetic readings at real 311
+  locations) or an uploaded readings file; detected faults can be sent
+  to the live queue through `POST /report`.
 
 ## How one call flows end to end
 
@@ -349,27 +364,22 @@ make results   python -m engine.run_all
 make preview   rebuild the dashboard's saved historical scenarios
 make api       uvicorn api.main:app --port 8000
 make dash      streamlit run dashboard/app.py
-make tunnel    ngrok http 8000
+make tunnel    ngrok http 8000 on NGROK_DOMAIN
+make voice     create or update the ElevenLabs agent and tools
+make voice-test simulated caller (SCENARIO=report, hazard, conrich, ...)
 make test      pytest -q
+make lint      ruff check and format check
 make reset     restore demo state (needs the dispatcher key)
 ```
 
-**Roles (five people, one owner per file):**
-
-| Role | Owns |
-|---|---|
-| Engine lead | `engine/` (including `live.py`), `results/`, non-raw `data/`, engine and tuning tests, `ANTHROPIC_MODEL` in `config.py` |
-| Backend lead | `api/` except `geocode.py`, API tests |
-| Voice lead | `voice/`, `api/geocode.py`, `scripts/fake_call.py`, `DEMO_ADDRESSES` in `config.py` |
-| Dashboard lead | `dashboard/` |
-| Pitch lead | `docs/` (design doc, demo script, architecture diagram, slides), `README.md` |
-
-Need a change in a file you don't own? Ask its owner.
+**Team:** Satyam Bhanot, Jasdeep Singh, Navjot, Nikita Williams and
+Gautam Patel. There are no fixed roles: anyone can change any file, as
+long as the contracts above stay true and the tests pass.
 
 **Rules:**
 
-- `main` must always run. Each person works on a branch named after
-  themselves.
+- `main` must always run. Work on a short-lived branch, run `make test`
+  and `make lint`, then merge.
 - Merge at least every three hours with small pull requests and a quick
   review from one teammate.
 - A piece is done when it runs from a fresh clone with `make`, has a test
@@ -392,7 +402,7 @@ Need a change in a file you don't own? Ask its owner.
 | Venue Wi-Fi or ngrok fails | Run `fake_call.py` live and show the recorded call |
 | An address can't be geocoded | Demo address list, then ask for an intersection |
 | Tuned weights don't beat version 1 on the test window | Report it honestly; the gain over FIFO is still the story |
-| Merge conflicts | Folder ownership and frequent small merges |
+| Merge conflicts | Small, frequent merges with the full test suite run first |
 | LLM call fails | Template note fills in automatically |
 
 The deciding question for any disagreement: does it make the demo more

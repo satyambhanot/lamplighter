@@ -29,6 +29,7 @@ lamplighter/
 │   ├── simulate.py           weekly historical replay, metrics, fix-date projection
 │   ├── tune.py               random search over policy weights
 │   ├── note.py               dispatcher note (Anthropic API, template fallback)
+│   ├── sensors.py            simulated pole sensors, uploaded readings, rule-based fault detector
 │   ├── live.py               the only engine module the API calls
 │   └── run_all.py            regenerates everything in results/
 ├── api/                      FastAPI service, the only database writer
@@ -39,9 +40,12 @@ lamplighter/
 │   ├── geocode.py            demo addresses, then cache, then Nominatim
 │   └── seed.py               builds the demo queue as of the demo date
 ├── dashboard/                Streamlit app
-│   ├── app.py                page layout: Dispatch and Evaluation workspaces
+│   ├── app.py                page layout: Dispatch, Evaluation and Sensors workspaces, urgent hazard handoffs
 │   ├── data.py               API client and the saved preview loader
 │   ├── maps.py               pydeck map layers
+│   ├── sensors.py            Sensors workspace: pole readings, detected faults, send to dispatch
+│   ├── icons.py              inline icons
+│   ├── favicon.svg           browser tab icon
 │   ├── styles.css            page styles
 │   └── preview.json          saved Historical preview scenarios (built by make preview)
 ├── scripts/
@@ -70,7 +74,6 @@ lamplighter/
     ├── DEMO_SCRIPT.md        step-by-step demo
     ├── CODE_REVIEW.md        engineering review and known modelling limits
     ├── REFACTOR_REVIEW.md    second review with prioritized findings
-    ├── AGENT_PROMPTS.md      per-role prompts for the team's coding agents
     ├── DESIGN.md             design document, exported from the team's shared doc
     ├── architecture.png      system context diagram
     ├── dashboard-wireframe.png  the dashboard layout the team agreed
