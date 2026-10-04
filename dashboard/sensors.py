@@ -250,8 +250,9 @@ def _dispatch_panel(
 ) -> None:
     st.subheader("Report to dispatch")
     st.caption(
-        "Each alarm becomes a report in the live queue, ranked and planned like a resident's call. "
-        "Switch the Dispatch workspace to Live dispatch to see it. Run make reset afterward to clear test reports."
+        "A pole with an alarm reports itself through the same POST /report route a resident's call "
+        "uses, so it is ranked and planned the same way. Switch the Dispatch workspace to Live "
+        "dispatch to watch it land. Run make reset afterward to clear test reports."
     )
     if alarms.empty:
         st.info("No alarms to send.")
@@ -259,9 +260,50 @@ def _dispatch_panel(
     sent = st.session_state.setdefault("sensor_sent", set())
     reports = [r for r in sensors.alarm_reports(alarms.sort_values("detected_at"), poles, simulated)]
     pending = [r for r in reports if r["pole_id"] not in sent]
+
+    auto_file = st.toggle(
+        "Auto-file: let the network report itself",
+        key="sensor-auto-file",
+        help=(
+            "Flip this on and the network immediately files every alarm waiting right now, no "
+            "Send click needed. It fires once per flip — leaving it on does not keep filing new "
+            "alarms on its own; flip it off and on again (or press it once more) to file a fresh batch."
+        ),
+    )
+    # Streamlit reruns this whole function on *any* widget interaction on this tab, not just this
+    # toggle — so only fire on the off-to-on edge. Firing on every rerun would mean an unrelated
+    # click elsewhere on the page (e.g. the simulation sliders) silently drains the backlog into
+    # the live dispatch database.
+    just_turned_on = auto_file and not st.session_state.get("sensor_auto_file_prev", False)
+    st.session_state["sensor_auto_file_prev"] = auto_file
+
     if not pending:
-        st.success("Every alarm has been sent.")
+        st.success("Every alarm has been filed.")
         return
+
+    if auto_file and not just_turned_on:
+        st.info(f"Auto-file is on. {len(pending)} alarm(s) waiting — flip it off and on to file them.")
+        return
+
+    if just_turned_on:
+        if not secret:
+            st.error("No voice access key is configured. Run make configure, then restart the dashboard.")
+            return
+        batch = pending[:MAX_SEND]
+        try:
+            with st.spinner(f"The network is filing {len(batch)} alarm(s) on its own..."):
+                rows = _send(base_url, secret, batch)
+        except PermissionError as exc:
+            st.error(str(exc))
+            return
+        except requests.RequestException:
+            st.error("Could not reach the dispatch API. Start it with make api, then try again.")
+            return
+        sent.update(r["pole_id"] for r in batch)
+        st.success(f"Filed {len(rows)} alarm(s) automatically — no resident call needed.")
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        return
+
     count = st.number_input(
         "How many alarms to send",
         1,
