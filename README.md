@@ -139,7 +139,7 @@ make dash VENV=/tmp/lamplighter-venv      # terminal 2
 | `dash` | Starts the Streamlit dashboard | `make dash` |
 | `tunnel` | Opens an ngrok tunnel to port 8000 on `NGROK_DOMAIN` (a random URL if unset) | `make tunnel` |
 | `voice` | Creates or updates the ElevenLabs agent, tools, and secret; checks the tunnel first | `make voice` |
-| `voice-test` | Runs one simulated caller against the agent; `SCENARIO` is `report`, `status`, `hazard`, `other_city`, or `emergency` | `make voice-test SCENARIO=hazard` |
+| `voice-test` | Runs one simulated caller against the agent; `SCENARIO` is `report`, `status`, `hazard`, `other_city`, `emergency`, `conrich`, `no_hazard`, or `not_found` | `make voice-test SCENARIO=hazard` |
 | `reset` | Clears simulated repairs and confirmed plans and restores the demo queue | `make reset` |
 
 - **Default target:** `make` with no target runs `setup`.

@@ -44,7 +44,7 @@ voice:
 	"$(VENV_PYTHON)" -m voice.setup_agent
 
 # Text-only test call through ElevenLabs:
-# make voice-test SCENARIO=report|status|hazard|other_city|emergency
+# make voice-test SCENARIO=report|status|hazard|other_city|emergency|conrich|no_hazard|not_found
 SCENARIO ?= report
 voice-test:
 	"$(VENV_PYTHON)" -m voice.test_call --scenario $(SCENARIO)
