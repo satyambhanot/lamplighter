@@ -2,11 +2,33 @@
 
 from __future__ import annotations
 
+import math
+from itertools import pairwise
+
 import pandas as pd
 import pydeck as pdk
 
 from config import DEPOT_LAT, DEPOT_LON, SCHOOLS_CSV, TRANSIT_STOPS_CSV
 from dashboard.data import DispatchView, capacity_impact
+
+
+def route_arrows(path: list[list[float]]) -> list[dict]:
+    """One chevron per long leg; skip short legs to avoid covering stop markers."""
+    arrows = []
+    for start, end in pairwise(path):
+        latitude = (start[1] + end[1]) / 2
+        east = (end[0] - start[0]) * math.cos(math.radians(latitude))
+        north = end[1] - start[1]
+        if math.hypot(east, north) * 111_195 < 800:
+            continue
+        arrows.append(
+            {
+                "position": [(start[0] + end[0]) / 2, latitude],
+                "angle": math.degrees(math.atan2(north, east)),
+                "label": "›",
+            }
+        )
+    return arrows
 
 
 def ticket_from_selection(state: dict) -> str | None:
@@ -53,14 +75,15 @@ def build_map(
         if not flags.get("planned", True) and planned or not flags.get("waiting", True) and not planned:
             continue
         color = (
-            [30, 128, 131, 255]
+            [13, 148, 136, 255]
             if item.ticket_id == selected
-            else [187, 90, 68, 230]
+            else [189, 61, 84, 230]
             if item.ticket_id in removed
-            else [190, 128, 36, 255]
+            else [37, 99, 235, 255]
             if planned
-            else [113, 132, 150, 190]
+            else [107, 128, 154, 190]
         )
+        size = 11 if planned or item.ticket_id == selected else 6
         points.append(
             {
                 "lat": item.lat,
@@ -70,10 +93,42 @@ def build_map(
                 "dispatch": f"Route stop {route[item.ticket_id]}" if planned else "Waiting backlog",
                 "label": str(route[item.ticket_id]) if planned else "",
                 "color": color,
-                "size": 11 if planned or item.ticket_id == selected else 6,
+                "size": size,
+                "shadow_size": size + 5,
             }
         )
     layers = []
+    # Soft shadow underlay: a larger, low-opacity dark circle beneath each
+    # marker gives the flat ScatterplotLayer a sense of depth/lift —
+    # deck.gl has no native drop-shadow for point layers.
+    if points:
+        layers.append(
+            pdk.Layer(
+                "ScatterplotLayer",
+                id="lights-shadow",
+                data=points,
+                get_position="[lon,lat]",
+                get_fill_color=[16, 32, 56, 60],
+                get_radius="shadow_size",
+                radius_units=pdk.types.String("pixels"),
+                pickable=False,
+            )
+        )
+    selected_point = next((p for p in points if p["ticket_id"] == selected), None)
+    if selected_point:
+        # Focus ring: a soft pulse behind the selected marker.
+        layers.append(
+            pdk.Layer(
+                "ScatterplotLayer",
+                id="selected-ring",
+                data=[selected_point],
+                get_position="[lon,lat]",
+                get_fill_color=[13, 148, 136, 55],
+                get_radius=26,
+                radius_units=pdk.types.String("pixels"),
+                pickable=False,
+            )
+        )
     for name, color in (("schools", [113, 99, 151, 190]), ("transit", [86, 134, 168, 170])):
         if flags.get(name) and references.get(name):
             layers.append(
@@ -102,9 +157,30 @@ def build_map(
                 id="route-order",
                 data=[{"path": path}],
                 get_path="path",
-                get_color=[150, 166, 180, 160],
-                get_width=2,
+                get_color=[37, 99, 235, 190],
+                get_width=2.5,
                 width_units=pdk.types.String("pixels"),
+                cap_rounded=True,
+                joint_rounded=True,
+                pickable=False,
+            )
+        )
+        layers.append(
+            pdk.Layer(
+                "TextLayer",
+                id="route-direction",
+                data=route_arrows(path),
+                get_position="position",
+                get_angle="angle",
+                get_text="label",
+                character_set=pdk.types.String("›"),
+                font_family=pdk.types.String("sans-serif"),
+                font_weight=700,
+                get_size=18,
+                get_color=[37, 99, 235, 255],
+                billboard=False,
+                get_text_anchor=pdk.types.String("middle"),
+                get_alignment_baseline=pdk.types.String("center"),
                 pickable=False,
             )
         )

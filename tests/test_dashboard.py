@@ -107,10 +107,11 @@ def test_events_failure_does_not_hide_a_valid_queue(monkeypatch) -> None:
     payload.update(revision=1, baseline=payload["plan"], events="invalid events")
 
     def get(base_url, endpoint, **params):
+        assert params["headers"] == {"X-Lamplighter-Dispatcher-Secret": "dispatcher-test"}
         return payload
 
     monkeypatch.setattr(data, "_get", get)
-    view = data.fetch_live("http://local", "tuned", 100)
+    view = data.fetch_live("http://local", "tuned", 100, "dispatcher-test")
     assert len(view.queue) == 2
     assert not view.events_available
 

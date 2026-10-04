@@ -98,6 +98,17 @@ make configure
 
 `make setup` builds `.venv` on Python 3.11 with the pinned packages. Without uv, it needs `python3.11` on your PATH, or `make setup PYTHON=/path/to/python3.11`.
 
+If the project is in a cloud-synced folder and `.venv` stalls while importing
+packages, create the environment outside that folder and pass its path to
+`make`:
+
+```bash
+make setup VENV=/tmp/lamplighter-venv
+make configure VENV=/tmp/lamplighter-venv
+make api VENV=/tmp/lamplighter-venv       # terminal 1
+make dash VENV=/tmp/lamplighter-venv      # terminal 2
+```
+
 **Data.** Everything the engine needs is committed in `data/`. You only need `data/raw/311_Service_Requests_-_Current_Year.csv` (the full City of Calgary 311 export, about 270 MB) if you want to rebuild the seed CSV.
 
 **Environment variables.** Copy names from `.env.example` into `.env`. `make configure` fills in the three generated keys for you and never overwrites existing values.
@@ -105,7 +116,7 @@ make configure
 | Variable | Set by | Needed for |
 |---|---|---|
 | `VOICE_SHARED_SECRET` | `make configure` | `POST /report` and `GET /status` (header `X-Lamplighter-Voice-Secret`) |
-| `DISPATCH_SHARED_SECRET` | `make configure` | plan confirmation, repairs, report history, demo reset (header `X-Lamplighter-Dispatcher-Secret`) |
+| `DISPATCH_SHARED_SECRET` | `make configure` | dispatch reads, plan confirmation, repairs, hazard handoffs, report history, demo reset (header `X-Lamplighter-Dispatcher-Secret`) |
 | `PHONE_HASH_SALT` | `make configure` | hashing caller phone numbers; `/report` fails without it |
 | `ANTHROPIC_API_KEY` | you, optional | LLM dispatcher note; without it a template note is used |
 | `LAMPLIGHTER_API_URL` | you, optional | API address for the dashboard and scripts (default `http://localhost:8000`) |
@@ -132,7 +143,7 @@ make configure
 | `reset` | Clears simulated repairs and confirmed plans and restores the demo queue | `make reset` |
 
 - **Default target:** `make` with no target runs `setup`.
-- **Overrides:** `PYTHON` picks the interpreter when uv is not installed, for example `make setup PYTHON=/usr/local/bin/python3.11`. `SCENARIO` picks the `voice-test` caller (default `report`).
+- **Overrides:** `PYTHON` picks the setup interpreter when uv is not installed, for example `make setup PYTHON=/usr/local/bin/python3.11`. `VENV` picks the environment directory for every Python target (default `.venv`). `SCENARIO` picks the `voice-test` caller (default `report`).
 - **Order:** `setup`, then `configure`, then `test`. Run `api` before `dash` (for Live dispatch), `reset`, `tunnel`, or `scripts/fake_call.py`. Run `preview` after `results`, because the saved preview uses `results/weights.json`. For voice: `api`, then `tunnel`, then `voice`.
 - **Dependencies:** every target except `setup` and `tunnel` needs `.venv`. `reset` and `fake_call.py` need `configure` and a running API. `voice` needs `api` and `tunnel` running.
 
@@ -152,7 +163,12 @@ make dash
 Open the URL Streamlit prints (usually http://localhost:8501). The dashboard has two data sources in the sidebar:
 
 - **Historical preview** (default) reads `dashboard/preview.json` and needs no API.
-- **Live dispatch** reads the API every 5 seconds. Here you review the proposed plan, confirm it, and mark confirmed lights repaired. Confirmed stop numbers stay fixed as repairs come in. A new resident report sends a confirmed plan back for review. Writes based on an older view are rejected, and retried writes are not duplicated.
+- **Live dispatch** reads the API every 5 seconds. Here you review and confirm the exact proposed route shown, and mark confirmed lights repaired. Confirmed stop numbers stay fixed as repairs come in. A new resident report sends a confirmed plan back for review. Writes based on an older view are rejected, and retried writes are not duplicated. Urgent hazards appear above the routine route; after escalation, record the handoff destination and reference.
+
+The linked worklist and map share the selected ticket. Marker rings and numbered
+stops show route membership; chevrons show proposed visit order. Capacity impact
+compares actual route membership with the same policy at 100% capacity. CSV
+exports and detailed route tables remain available below the main workspace.
 
 Repairs are simulated and the clock is frozen at the demo date: this is not live field status. Fix-date estimates are approximate, because they assume straight-line travel and weekly planning.
 

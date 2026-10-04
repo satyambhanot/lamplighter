@@ -22,6 +22,9 @@ from api.schemas import (
     DispatchResponse,
     EventItem,
     FixedResponse,
+    HazardHandoffRequest,
+    HazardHandoffResponse,
+    HazardItem,
     HistoryItem,
     HistoryResponse,
     PlanResponse,
@@ -105,6 +108,9 @@ def _scenario(frame: pd.DataFrame, policy: str, budget_pct: float) -> tuple[list
         note=result["note"],
         queue=items(planned),
     )
+    plan.candidate_id = hashlib.sha256(
+        json.dumps(plan.model_dump(exclude={"candidate_id"}), sort_keys=True).encode()
+    ).hexdigest()[:24]
     return queue, plan
 
 
@@ -115,7 +121,10 @@ def _confirmed(conn: sqlite3.Connection) -> ConfirmedPlan | None:
     if row is None:
         return None
     visits = conn.execute(
-        "SELECT light_id,status,position FROM plan_visits WHERE plan_id=? ORDER BY position", (row["id"],)
+        "SELECT v.light_id,v.status,v.position,l.comm_name,l.fixed_at "
+        "FROM plan_visits AS v JOIN lights AS l ON l.id=v.light_id "
+        "WHERE v.plan_id=? ORDER BY v.position",
+        (row["id"],),
     ).fetchall()
     return ConfirmedPlan(
         id=row["id"],
@@ -126,10 +135,37 @@ def _confirmed(conn: sqlite3.Connection) -> ConfirmedPlan | None:
         remaining_ids=[v["light_id"] for v in visits if v["status"] == "pending"],
         completed_count=sum(v["status"] == "fixed" for v in visits),
         visits=[
-            ConfirmedVisit(ticket_id=v["light_id"], position=v["position"], status=v["status"])
+            ConfirmedVisit(
+                ticket_id=v["light_id"],
+                position=v["position"],
+                status=v["status"],
+                comm_name=v["comm_name"] or "Unassigned",
+                fixed_at=v["fixed_at"],
+            )
             for v in visits
         ],
     )
+
+
+def _hazards(conn: sqlite3.Connection) -> list[HazardItem]:
+    rows = conn.execute(
+        "SELECT l.id, l.lat, l.lon, l.first_reported, l.call_count, "
+        "c.location_text, c.description FROM lights AS l "
+        "LEFT JOIN calls AS c ON c.id=(SELECT MAX(id) FROM calls WHERE light_id=l.id) "
+        "WHERE l.status='hazard' ORDER BY l.first_reported, l.id"
+    ).fetchall()
+    return [
+        HazardItem(
+            ticket_id=row["id"],
+            lat=row["lat"],
+            lon=row["lon"],
+            first_reported=row["first_reported"],
+            call_count=row["call_count"],
+            location_text=row["location_text"] or "",
+            description=row["description"] or "",
+        )
+        for row in rows
+    ]
 
 
 def dispatch_snapshot(conn: sqlite3.Connection, policy: str, budget_pct: float) -> DispatchResponse:
@@ -146,6 +182,7 @@ def dispatch_snapshot(conn: sqlite3.Connection, policy: str, budget_pct: float) 
             plan=plan,
             baseline=baseline,
             events=events,
+            hazards=_hazards(conn),
             confirmed_plan=_confirmed(conn),
         )
 
@@ -175,11 +212,14 @@ def confirm_plan(conn: sqlite3.Connection, req: ConfirmRequest) -> ConfirmedPlan
                 saved["reviewed_revision"] == req.revision
                 and active.policy == req.policy
                 and active.budget_pct == req.budget_pct
+                and saved.get("candidate_id") == req.candidate_id
             ):
                 return active
         if db.revision(conn) != req.revision:
             raise Conflict("The queue changed. Review the refreshed plan before confirming.")
         _, plan = _scenario(_frame(conn), req.policy, req.budget_pct)
+        if plan.candidate_id != req.candidate_id:
+            raise Conflict("The proposed route changed. Review the refreshed plan before confirming.")
         if not plan.queue:
             raise Conflict("There are no visits to confirm at this capacity.")
         plan_id = "P-" + uuid4().hex[:12]
@@ -200,6 +240,28 @@ def confirm_plan(conn: sqlite3.Connection, req: ConfirmRequest) -> ConfirmedPlan
             conn, "plan_confirmed", f"Confirmed {len(plan.queue)} visits at {req.budget_pct:.0%} capacity."
         )
         return _confirmed(conn)
+
+
+def handoff_hazard(
+    conn: sqlite3.Connection, ticket_id: str, req: HazardHandoffRequest
+) -> HazardHandoffResponse:
+    note = req.note.strip()
+    if len(note) < 3:
+        raise ValueError("Describe who received the hazard handoff.")
+    with db.transaction(conn, write=True):
+        light = db.get_light(conn, ticket_id)
+        if light is None:
+            raise NotFound("This hazard does not exist.")
+        if light["status"] == "hazard_referred":
+            return HazardHandoffResponse(
+                ticket_id=ticket_id, status="hazard_referred", revision=db.revision(conn)
+            )
+        if light["status"] != "hazard" or db.revision(conn) != req.revision:
+            raise Conflict("The hazard list changed. Refresh before recording the handoff.")
+        conn.execute("UPDATE lights SET status='hazard_referred' WHERE id=?", (ticket_id,))
+        revision = db.bump_revision(conn)
+        log_event(conn, "hazard_referred", f"Hazard {ticket_id} referred: {note}", ticket_id)
+        return HazardHandoffResponse(ticket_id=ticket_id, status="hazard_referred", revision=revision)
 
 
 def mark_fixed(conn: sqlite3.Connection, ticket_id: str, req: RepairRequest) -> FixedResponse:

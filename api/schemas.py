@@ -55,6 +55,7 @@ class QueueItem(BaseModel):
 class PlanResponse(BaseModel):
     budget_pct: float
     policy: PolicyName
+    candidate_id: str | None = None
     lights_planned: int
     minutes_used: float
     skipped_count: int
@@ -74,6 +75,28 @@ class ConfirmRequest(BaseModel):
     revision: int = Field(ge=0)
     policy: PolicyName
     budget_pct: float = Field(ge=0.5, le=1.2, allow_inf_nan=False)
+    candidate_id: str = Field(min_length=16, max_length=64)
+
+
+class HazardItem(BaseModel):
+    ticket_id: str
+    lat: float
+    lon: float
+    first_reported: str
+    location_text: str
+    description: str
+    call_count: int
+
+
+class HazardHandoffRequest(BaseModel):
+    revision: int = Field(ge=0)
+    note: str = Field(min_length=3, max_length=500)
+
+
+class HazardHandoffResponse(BaseModel):
+    ticket_id: str
+    status: Literal["hazard_referred"]
+    revision: int
 
 
 class RepairRequest(BaseModel):
@@ -85,6 +108,8 @@ class ConfirmedVisit(BaseModel):
     ticket_id: str
     position: int
     status: str
+    comm_name: str = "Unassigned"
+    fixed_at: str | None = None
 
 
 class ConfirmedPlan(BaseModel):
@@ -105,6 +130,7 @@ class DispatchResponse(BaseModel):
     plan: PlanResponse
     baseline: PlanResponse
     events: list[EventItem]
+    hazards: list[HazardItem] = Field(default_factory=list)
     confirmed_plan: ConfirmedPlan | None = None
 
 
