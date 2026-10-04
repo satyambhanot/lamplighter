@@ -62,7 +62,7 @@ def _frame(conn: sqlite3.Connection) -> pd.DataFrame:
             columns=["latitude", "longitude", "comm_name", "is_damage", "first_reported", "call_count"]
         )
     frame = pd.DataFrame(rows).set_index("id").rename(columns={"lat": "latitude", "lon": "longitude"})
-    frame["first_reported"] = pd.to_datetime(frame["first_reported"])
+    frame["first_reported"] = pd.to_datetime(frame["first_reported"], format="ISO8601")
     frame["is_damage"] = frame["is_damage"].astype(bool)
     frame["comm_name"] = frame["comm_name"].fillna("Unassigned")
     return frame

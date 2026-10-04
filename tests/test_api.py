@@ -208,3 +208,23 @@ def test_completed_queue_is_not_reseeded_on_restart(client, monkeypatch):
     seed.ensure_demo_state(conn)
     conn.close()
     assert client.get("/dispatch").json()["queue"] == []
+
+
+def test_new_light_reranks_alongside_seeded_iso_timestamps(client, monkeypatch):
+    # The demo seed stores full ISO timestamps; live reports store a bare date.
+    from api import geocode
+
+    client, path = client
+    conn = db.get_connection(path)
+    with db.transaction(conn, write=True):
+        conn.execute("UPDATE lights SET first_reported='2026-08-01T00:00:00' WHERE id='L1'")
+    conn.close()
+    monkeypatch.setattr(geocode, "geocode", lambda *args: (51.10, -114.20))
+    result = client.post(
+        "/report",
+        headers={"X-Lamplighter-Voice-Secret": "voice-test"},
+        json={"phone": "4035550101", "location_text": "Calgary", "description": "Light out"},
+    )
+    assert result.status_code == 200, result.text
+    assert not result.json()["merged"]
+    assert result.json()["rank"] is not None
