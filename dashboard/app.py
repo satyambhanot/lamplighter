@@ -31,10 +31,12 @@ from dashboard.data import (
 )
 from dashboard.icons import icon
 from dashboard.maps import build_map, reference_layers, ticket_from_selection
+from dashboard.sensors import render_sensors
 
 load_dotenv(ROOT_DIR / ".env")
 API_BASE_URL = os.environ.get("LAMPLIGHTER_API_URL", "http://localhost:8000")
 DISPATCH_TOKEN = os.environ.get("DISPATCH_SHARED_SECRET", "")
+VOICE_TOKEN = os.environ.get("VOICE_SHARED_SECRET", "")
 st.set_page_config(page_title="Lamplighter · Dispatch", page_icon="◉", layout="wide")
 st.markdown(f"<style>{Path(__file__).with_name('styles.css').read_text()}</style>", unsafe_allow_html=True)
 
@@ -571,7 +573,7 @@ with st.sidebar:
         f'<div class="brand"><span class="brand-mark">{icon("lamp", 21, color="#0e2b42", stroke=2)}</span>'
         '<span class="brand-name">lamplighter</span></div><div class="brand-sub">Street lighting operations</div>'
     )
-    workspace = st.radio("Workspace", ["Dispatch", "Evaluation"], key="workspace")
+    workspace = st.radio("Workspace", ["Dispatch", "Evaluation", "Sensors"], key="workspace")
     markup('<div class="sidebar-label">DATA SOURCE</div>')
     source = st.selectbox(
         "Data source", ["Historical preview", "Live dispatch"], key="source", on_change=change_source
@@ -598,12 +600,22 @@ with st.sidebar:
     )
 
 historical = source == "Historical preview"
+WORKSPACE_TITLES = {
+    "Dispatch": "This week’s plan",
+    "Evaluation": "Policy evaluation",
+    "Sensors": "Pole sensors",
+}
+WORKSPACE_BLURBS = {
+    "Dispatch": "Review priorities. Set crew capacity. Dispatch with confidence.",
+    "Evaluation": "Review priorities. Set crew capacity. Dispatch with confidence.",
+    "Sensors": "Watch pole readings. Catch faults before residents call. Send them to dispatch.",
+}
 markup(
     f'<div class="page-head" data-workspace="{workspace}"><div><div class="eyebrow">OPERATIONS / '
     + workspace.upper()
     + "</div>"
-    f"<h1>{'This week’s plan' if workspace == 'Dispatch' else 'Policy evaluation'}</h1>"
-    "<p>Review priorities. Set crew capacity. Dispatch with confidence.</p></div>"
+    f"<h1>{WORKSPACE_TITLES[workspace]}</h1>"
+    f"<p>{WORKSPACE_BLURBS[workspace]}</p></div>"
     f'<div class="date-block"><span class="eyebrow">DEMO PLANNING CLOCK</span><strong>{datetime.fromisoformat(DEMO_DATE).strftime("%A, %d %B %Y")}</strong></div></div>'
 )
 
@@ -723,5 +735,7 @@ def dispatch() -> None:
 
 if workspace == "Evaluation":
     render_evaluation()
+elif workspace == "Sensors":
+    render_sensors(API_BASE_URL, VOICE_TOKEN)
 else:
     dispatch()
