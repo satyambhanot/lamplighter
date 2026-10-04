@@ -599,7 +599,9 @@ with st.sidebar:
 
 historical = source == "Historical preview"
 markup(
-    '<div class="page-head"><div><div class="eyebrow">OPERATIONS / ' + workspace.upper() + "</div>"
+    f'<div class="page-head" data-workspace="{workspace}"><div><div class="eyebrow">OPERATIONS / '
+    + workspace.upper()
+    + "</div>"
     f"<h1>{'This week’s plan' if workspace == 'Dispatch' else 'Policy evaluation'}</h1>"
     "<p>Review priorities. Set crew capacity. Dispatch with confidence.</p></div>"
     f'<div class="date-block"><span class="eyebrow">DEMO PLANNING CLOCK</span><strong>{datetime.fromisoformat(DEMO_DATE).strftime("%A, %d %B %Y")}</strong></div></div>'

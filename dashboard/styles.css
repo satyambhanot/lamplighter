@@ -24,9 +24,19 @@
 
 .stApp { background: var(--canvas); color: var(--ink); }
 [data-testid="stHeader"] { background: color-mix(in srgb, var(--canvas) 94%, transparent); }
-[data-testid="stMainBlockContainer"] { max-width: 1580px; padding: 2.5rem 2.3rem 2rem; animation: rise .35s var(--ease); }
+[data-testid="stMainBlockContainer"] { max-width: 1580px; padding: 2.5rem 2.3rem 2rem; }
 
-@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+/* Workspace navigation uses a sidebar radio. Changing the keyframe name
+   restarts the entrance only when that workspace changes, not on polling. */
+[data-testid="stMainBlockContainer"]:has(.page-head[data-workspace]) { animation: dispatch-enter .18s var(--ease); }
+[data-testid="stMainBlockContainer"]:has(.page-head[data-workspace="Evaluation"]) { animation-name: evaluation-enter; }
+[role="tabpanel"]:not([hidden]) { animation: dispatch-enter .18s var(--ease); }
+@keyframes dispatch-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes evaluation-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  [data-testid="stMainBlockContainer"]:has(.page-head[data-workspace]),
+  [role="tabpanel"]:not([hidden]) { animation: none; }
+}
 @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
 
 .icon { display: inline-flex; vertical-align: -3px; }
