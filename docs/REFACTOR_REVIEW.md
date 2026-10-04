@@ -194,8 +194,8 @@ The other findings below apply after those improvements.
     as the city boundary of Calgary was accepted as a light coordinate. A broad
     or ambiguous description can therefore create or merge a report at a city
     or area centroid. A successful HTTP response is not proof of a usable street
-    location. `DEMO_ADDRESSES` is also empty, so normal address lookup lacks the
-    intended deterministic demo fallback.
+    location. A small set of named demo locations now has deterministic
+    coordinates; other ambiguous addresses still depend on geocoding.
 
     Refactor: return a structured location result with precision, candidate
     description, and clarification requirement; validate address/intersection
@@ -210,13 +210,12 @@ The other findings below apply after those improvements.
   eligible through normal live-demo actions. Decide how to demonstrate the full
   new-report-to-repair cycle; an explicit simulation clock/period transition
   would also support the capacity ledger.
-- `voice/tools.json` has no tools; the prompt/setup/transcript are placeholders,
-  and `scripts/fake_call.py` raises `NotImplementedError`. These are unfinished
-  integration work, separate from code cleanup. The external voice flow has not
-  been validated in this review.
-- The saved tuning log contains three trials, while configuration declares 200.
-  Saved weights and summaries lack a run manifest tying them to code, inputs,
-  metric definition, and effective trial count. Preview input hashes currently
+- `voice/tools.json` has no tools, and the prompt/setup/transcript are
+  placeholders. The local `scripts/fake_call.py` now exercises report and status,
+  but the external voice flow has not been validated in this review.
+- The saved tuning log now contains 200 trials, matching configuration.
+  Saved weights and summaries still lack a run manifest tying them to code,
+  inputs, metric definition, and effective trial count. Preview input hashes currently
   match the files on disk, but the manifest does not identify the engine version.
   The existing improvement figures cannot validate the corrected evaluator.
 - Missing school/transit files become absent features; invalid CSV coordinates,

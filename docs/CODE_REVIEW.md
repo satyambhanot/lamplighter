@@ -37,6 +37,10 @@ preserved. Browser writes recorded simulated repairs in the ignored local databa
 
 The second-pass observations below describe the state before this implementation;
 the API-stub and projection-clock findings are now resolved.
+The committed result log also contains 200 tuning trials; the earlier
+three-trial observation below is retained as historical review evidence.
+Named demo locations and the local sample call script were added during the
+branch merge; the external voice integration remains unfinished.
 
 ## Second pass: executable checks and frontend work
 
